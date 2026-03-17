@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { api, getImageUrl } from '@/lib/api';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Volume2, VolumeX, Lock, RotateCw, Maximize, Maximize2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Volume2, VolumeX, Lock, RotateCcw, Maximize2, Minimize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { playSound } from '@/lib/sounds';
@@ -20,7 +20,6 @@ const CustomerViewer = () => {
   const [showControls, setShowControls] = useState(true);
   const [soundOn, setSoundOn] = useState(true);
   const [rotation, setRotation] = useState(0);
-  const [fillScreen, setFillScreen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
   
@@ -54,6 +53,22 @@ const CustomerViewer = () => {
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
+
+  // Preload adjacent images for smooth navigation
+  useEffect(() => {
+    if (!storybook || !authenticated) return;
+
+    const preloadImage = (index) => {
+      if (index >= 0 && index < storybook.spreads.length) {
+        const img = new Image();
+        img.src = getImageUrl(storybook.spreads[index]);
+      }
+    };
+
+    // Preload next and previous images
+    preloadImage(currentSpread + 1);
+    preloadImage(currentSpread - 1);
+  }, [currentSpread, storybook, authenticated]);
 
   const resetHideControlsTimer = () => {
     if (hideControlsTimerRef.current) {
@@ -119,7 +134,6 @@ const CustomerViewer = () => {
     if (currentSpread > 0) {
       setImageLoading(true);
       setCurrentSpread(currentSpread - 1);
-      // Play sound reliably
       if (soundOn && storybook.settings?.soundEnabled && storybook.settings?.defaultSound) {
         setTimeout(() => {
           playSound(storybook.settings.defaultSound, storybook.settings.soundVolume || 0.7);
@@ -133,7 +147,6 @@ const CustomerViewer = () => {
     if (currentSpread < storybook.spreads.length - 1) {
       setImageLoading(true);
       setCurrentSpread(currentSpread + 1);
-      // Play sound reliably
       if (soundOn && storybook.settings?.soundEnabled && storybook.settings?.defaultSound) {
         setTimeout(() => {
           playSound(storybook.settings.defaultSound, storybook.settings.soundVolume || 0.7);
@@ -144,12 +157,7 @@ const CustomerViewer = () => {
   };
 
   const handleRotate = () => {
-    setRotation((prev) => (prev + 90) % 360);
-    resetHideControlsTimer();
-  };
-
-  const handleFillScreen = () => {
-    setFillScreen(!fillScreen);
+    setRotation((prev) => (prev === 0 ? 90 : 0));
     resetHideControlsTimer();
   };
 
@@ -183,10 +191,8 @@ const CustomerViewer = () => {
     // Swipe threshold: 50px
     if (Math.abs(diff) > 50) {
       if (diff > 0) {
-        // Swiped left - go to next
         goToNext();
       } else {
-        // Swiped right - go to previous
         goToPrevious();
       }
     }
@@ -280,7 +286,7 @@ const CustomerViewer = () => {
   return (
     <div 
       ref={viewerRef}
-      className="min-h-screen relative flex flex-col"
+      className="min-h-screen relative flex flex-col overflow-hidden"
       style={{ backgroundColor: themeBackground }}
       onMouseMove={handleUserActivity}
       onTouchMove={handleUserActivity}
@@ -288,15 +294,15 @@ const CustomerViewer = () => {
       onTouchEnd={handleTouchEnd}
       data-testid="customer-viewer"
     >
-      <div className="flex-1 flex items-center justify-center p-2 sm:p-8 relative overflow-hidden">
-        {/* Invisible tap zones for mobile */}
+      <div className="flex-1 flex items-center justify-center p-2 sm:p-4 md:p-8 relative">
+        {/* Invisible tap zones for mobile - 20% left and right */}
         <div 
-          className="absolute left-0 top-0 bottom-0 w-1/4 z-10 cursor-pointer md:hidden"
+          className="absolute left-0 top-0 bottom-0 w-[20%] z-10 cursor-pointer"
           onClick={() => handleTapZone('left')}
           data-testid="tap-zone-left"
         />
         <div 
-          className="absolute right-0 top-0 bottom-0 w-1/4 z-10 cursor-pointer md:hidden"
+          className="absolute right-0 top-0 bottom-0 w-[20%] z-10 cursor-pointer"
           onClick={() => handleTapZone('right')}
           data-testid="tap-zone-right"
         />
@@ -308,117 +314,116 @@ const CustomerViewer = () => {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -100 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
-            className="relative z-0"
+            className="relative z-0 max-w-full max-h-full"
             style={{ 
               transform: `rotate(${rotation}deg)`,
-              transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-              width: fillScreen ? '100vw' : 'auto',
-              height: fillScreen ? '100vh' : 'auto',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
+              transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
             }}
           >
+            {/* Loading skeleton/shimmer */}
             {imageLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-magical-ink/20 backdrop-blur-sm z-10">
-                <div className="w-8 h-8 border-4 border-magical-gold border-t-transparent rounded-full animate-spin" />
+              <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-r from-magical-ink/10 via-magical-plum/10 to-magical-ink/10 backdrop-blur-sm z-10 rounded-xl animate-pulse">
+                <div className="w-10 h-10 border-4 border-magical-gold border-t-transparent rounded-full animate-spin" />
               </div>
             )}
+            
             <img
               src={getImageUrl(storybook.spreads[currentSpread])}
               alt={`Spread ${currentSpread + 1}`}
               loading="eager"
               onLoad={() => setImageLoading(false)}
-              className={`shadow-2xl page-shadow transition-opacity duration-300 ${imageLoading ? 'opacity-0' : 'opacity-100'} ${fillScreen ? 'w-full h-full' : 'max-h-[75vh] sm:max-h-[85vh] w-auto max-w-[95vw]'}`}
+              className={`shadow-2xl page-shadow transition-opacity duration-300 max-w-[95vw] max-h-[70vh] sm:max-h-[75vh] md:max-h-[85vh] w-auto h-auto object-contain ${imageLoading ? 'opacity-0' : 'opacity-100'}`}
               style={{
-                borderRadius: storybook.settings?.roundedCorners ? `${storybook.settings.cornerRadius}px` : '0px',
-                objectFit: fillScreen ? 'contain' : 'initial'
+                borderRadius: storybook.settings?.roundedCorners ? `${storybook.settings.cornerRadius}px` : '0px'
               }}
               data-testid="viewer-spread-image"
             />
           </motion.div>
         </AnimatePresence>
 
-        {/* Mobile-responsive controls - More compact on mobile */}
-        {showControls && (
-          <div className="absolute bottom-2 sm:bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-0.5 sm:gap-2 bg-black/70 backdrop-blur-xl px-2 sm:px-6 py-1.5 sm:py-3 rounded-full border border-white/10 z-20 shadow-xl">
-            <Button
-              onClick={goToPrevious}
-              disabled={currentSpread === 0}
-              size="sm"
-              variant="ghost"
-              className="text-white hover:bg-white/20 h-7 w-7 sm:h-10 sm:w-10 p-0 disabled:opacity-30"
-              data-testid="viewer-prev-button"
+        {/* Mobile-responsive controls with AnimatePresence for smooth hide/show */}
+        <AnimatePresence>
+          {showControls && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ duration: 0.3 }}
+              className="absolute bottom-4 sm:bottom-6 md:bottom-8 left-1/2 -translate-x-1/2 z-20"
             >
-              <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
-            </Button>
-            
-            {storybook.settings?.showPageNumbers && (
-              <span className="text-white font-sans text-[10px] sm:text-sm px-1.5 sm:px-4 min-w-[45px] sm:min-w-[60px] text-center" data-testid="viewer-page-indicator">
-                {currentSpread + 1}/{totalSpreads}
-              </span>
-            )}
-            
-            <Button
-              onClick={goToNext}
-              disabled={currentSpread === totalSpreads - 1}
-              size="sm"
-              variant="ghost"
-              className="text-white hover:bg-white/20 h-7 w-7 sm:h-10 sm:w-10 p-0 disabled:opacity-30"
-              data-testid="viewer-next-button"
-            >
-              <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
-            </Button>
+              <div className="flex items-center justify-center flex-wrap gap-1 sm:gap-2 bg-black/80 backdrop-blur-xl px-2 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 rounded-full border border-white/10 shadow-2xl max-w-[95vw]">
+                <Button
+                  onClick={goToPrevious}
+                  disabled={currentSpread === 0}
+                  size="sm"
+                  variant="ghost"
+                  className="text-white hover:bg-white/20 h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 p-0 disabled:opacity-30 flex-shrink-0"
+                  data-testid="viewer-prev-button"
+                >
+                  <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                </Button>
+                
+                {storybook.settings?.showPageNumbers && (
+                  <span className="text-white font-sans text-[11px] sm:text-xs md:text-sm px-2 sm:px-3 md:px-4 min-w-[50px] text-center flex-shrink-0" data-testid="viewer-page-indicator">
+                    {currentSpread + 1}/{totalSpreads}
+                  </span>
+                )}
+                
+                <Button
+                  onClick={goToNext}
+                  disabled={currentSpread === totalSpreads - 1}
+                  size="sm"
+                  variant="ghost"
+                  className="text-white hover:bg-white/20 h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 p-0 disabled:opacity-30 flex-shrink-0"
+                  data-testid="viewer-next-button"
+                >
+                  <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+                </Button>
 
-            <div className="mx-0.5 sm:mx-2 h-4 sm:h-6 w-px bg-white/20" />
+                <div className="mx-1 sm:mx-1.5 md:mx-2 h-5 sm:h-6 w-px bg-white/20 flex-shrink-0" />
 
-            <Button
-              onClick={handleRotate}
-              size="sm"
-              variant="ghost"
-              className="text-white hover:bg-white/20 h-7 w-7 sm:h-10 sm:w-10 p-0"
-              title="Rotate 90°"
-              data-testid="viewer-rotate"
-            >
-              <RotateCw className="w-4 h-4 sm:w-5 sm:h-5" />
-            </Button>
+                <Button
+                  onClick={handleRotate}
+                  size="sm"
+                  variant="ghost"
+                  className={`text-white hover:bg-white/20 h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 p-0 flex-shrink-0 ${rotation !== 0 ? 'bg-white/20 ring-2 ring-white/40' : ''}`}
+                  title="Rotate 90°"
+                  data-testid="viewer-rotate"
+                >
+                  <RotateCcw className="w-4 h-4 sm:w-5 sm:h-5" />
+                </Button>
 
-            <Button
-              onClick={handleFillScreen}
-              size="sm"
-              variant="ghost"
-              className={`text-white hover:bg-white/20 h-7 w-7 sm:h-10 sm:w-10 p-0 ${fillScreen ? 'bg-white/20' : ''}`}
-              title="Fill Screen"
-              data-testid="viewer-fill-screen"
-            >
-              <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />
-            </Button>
+                <Button
+                  onClick={handleFullscreen}
+                  size="sm"
+                  variant="ghost"
+                  className={`text-white hover:bg-white/20 h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 p-0 flex-shrink-0 ${isFullscreen ? 'bg-white/20 ring-2 ring-white/40' : ''}`}
+                  title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                  data-testid="viewer-fullscreen"
+                >
+                  {isFullscreen ? (
+                    <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                  ) : (
+                    <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                  )}
+                </Button>
 
-            <Button
-              onClick={handleFullscreen}
-              size="sm"
-              variant="ghost"
-              className={`text-white hover:bg-white/20 h-7 w-7 sm:h-10 sm:w-10 p-0 ${isFullscreen ? 'bg-white/20' : ''}`}
-              title="Fullscreen"
-              data-testid="viewer-fullscreen"
-            >
-              <Maximize className="w-4 h-4 sm:w-5 sm:h-5" />
-            </Button>
-
-            {storybook.settings?.soundEnabled && (
-              <Button
-                onClick={() => setSoundOn(!soundOn)}
-                size="sm"
-                variant="ghost"
-                className="text-white hover:bg-white/20 h-7 w-7 sm:h-10 sm:w-10 p-0"
-                title={soundOn ? "Mute" : "Unmute"}
-                data-testid="viewer-sound-toggle"
-              >
-                {soundOn ? <Volume2 className="w-4 h-4 sm:w-5 sm:h-5" /> : <VolumeX className="w-4 h-4 sm:w-5 sm:h-5" />}
-              </Button>
-            )}
-          </div>
-        )}
+                {storybook.settings?.soundEnabled && (
+                  <Button
+                    onClick={() => setSoundOn(!soundOn)}
+                    size="sm"
+                    variant="ghost"
+                    className="text-white hover:bg-white/20 h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 p-0 flex-shrink-0"
+                    title={soundOn ? "Mute" : "Unmute"}
+                    data-testid="viewer-sound-toggle"
+                  >
+                    {soundOn ? <Volume2 className="w-4 h-4 sm:w-5 sm:h-5" /> : <VolumeX className="w-4 h-4 sm:w-5 sm:h-5" />}
+                  </Button>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
