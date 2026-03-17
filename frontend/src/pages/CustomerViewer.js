@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { api, getImageUrl } from '@/lib/api';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Volume2, VolumeX, Lock, RotateCw, Maximize, Maximize2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Volume2, VolumeX, Lock, RotateCw, Maximize, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { playSound } from '@/lib/sounds';
@@ -17,12 +17,12 @@ const CustomerViewer = () => {
   const [verifying, setVerifying] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [currentSpread, setCurrentSpread] = useState(0);
-  const [zoom, setZoom] = useState(1);
   const [showControls, setShowControls] = useState(true);
   const [soundOn, setSoundOn] = useState(true);
   const [rotation, setRotation] = useState(0);
   const [fillScreen, setFillScreen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
   
   const viewerRef = useRef(null);
   const hideControlsTimerRef = useRef(null);
@@ -117,14 +117,13 @@ const CustomerViewer = () => {
 
   const goToPrevious = () => {
     if (currentSpread > 0) {
+      setImageLoading(true);
       setCurrentSpread(currentSpread - 1);
-      // Reliably play sound
+      // Play sound reliably
       if (soundOn && storybook.settings?.soundEnabled && storybook.settings?.defaultSound) {
-        try {
+        setTimeout(() => {
           playSound(storybook.settings.defaultSound, storybook.settings.soundVolume || 0.7);
-        } catch (error) {
-          console.log('Sound play failed:', error);
-        }
+        }, 50);
       }
       resetHideControlsTimer();
     }
@@ -132,14 +131,13 @@ const CustomerViewer = () => {
 
   const goToNext = () => {
     if (currentSpread < storybook.spreads.length - 1) {
+      setImageLoading(true);
       setCurrentSpread(currentSpread + 1);
-      // Reliably play sound
+      // Play sound reliably
       if (soundOn && storybook.settings?.soundEnabled && storybook.settings?.defaultSound) {
-        try {
+        setTimeout(() => {
           playSound(storybook.settings.defaultSound, storybook.settings.soundVolume || 0.7);
-        } catch (error) {
-          console.log('Sound play failed:', error);
-        }
+        }, 50);
       }
       resetHideControlsTimer();
     }
@@ -312,8 +310,8 @@ const CustomerViewer = () => {
             transition={{ duration: 0.5, ease: "easeOut" }}
             className="relative z-0"
             style={{ 
-              transform: `scale(${zoom}) rotate(${rotation}deg)`,
-              transition: 'transform 0.3s ease-out',
+              transform: `rotate(${rotation}deg)`,
+              transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
               width: fillScreen ? '100vw' : 'auto',
               height: fillScreen ? '100vh' : 'auto',
               display: 'flex',
@@ -321,37 +319,43 @@ const CustomerViewer = () => {
               justifyContent: 'center'
             }}
           >
+            {imageLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-magical-ink/20 backdrop-blur-sm z-10">
+                <div className="w-8 h-8 border-4 border-magical-gold border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
             <img
               src={getImageUrl(storybook.spreads[currentSpread])}
               alt={`Spread ${currentSpread + 1}`}
-              className={`shadow-2xl page-shadow ${fillScreen ? 'w-full h-full' : 'max-h-[75vh] sm:max-h-[80vh] w-auto'}`}
+              loading="eager"
+              onLoad={() => setImageLoading(false)}
+              className={`shadow-2xl page-shadow transition-opacity duration-300 ${imageLoading ? 'opacity-0' : 'opacity-100'} ${fillScreen ? 'w-full h-full' : 'max-h-[75vh] sm:max-h-[85vh] w-auto max-w-[95vw]'}`}
               style={{
                 borderRadius: storybook.settings?.roundedCorners ? `${storybook.settings.cornerRadius}px` : '0px',
-                objectFit: fillScreen ? 'contain' : 'initial',
-                maxWidth: fillScreen ? '100%' : 'initial'
+                objectFit: fillScreen ? 'contain' : 'initial'
               }}
               data-testid="viewer-spread-image"
             />
           </motion.div>
         </AnimatePresence>
 
-        {/* Mobile-responsive controls */}
+        {/* Mobile-responsive controls - More compact on mobile */}
         {showControls && (
-          <div className="absolute bottom-4 sm:bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-1 sm:gap-2 bg-black/60 backdrop-blur-xl px-3 sm:px-6 py-2 sm:py-3 rounded-full border border-white/10 z-20">
+          <div className="absolute bottom-2 sm:bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-0.5 sm:gap-2 bg-black/70 backdrop-blur-xl px-2 sm:px-6 py-1.5 sm:py-3 rounded-full border border-white/10 z-20 shadow-xl">
             <Button
               onClick={goToPrevious}
               disabled={currentSpread === 0}
               size="sm"
               variant="ghost"
-              className="text-white hover:bg-white/20 h-8 w-8 sm:h-10 sm:w-10 p-0"
+              className="text-white hover:bg-white/20 h-7 w-7 sm:h-10 sm:w-10 p-0 disabled:opacity-30"
               data-testid="viewer-prev-button"
             >
-              <ChevronLeft className="w-4 h-4 sm:w-6 sm:h-6" />
+              <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
             </Button>
             
             {storybook.settings?.showPageNumbers && (
-              <span className="text-white font-sans text-xs sm:text-sm px-2 sm:px-4" data-testid="viewer-page-indicator">
-                {currentSpread + 1} / {totalSpreads}
+              <span className="text-white font-sans text-[10px] sm:text-sm px-1.5 sm:px-4 min-w-[45px] sm:min-w-[60px] text-center" data-testid="viewer-page-indicator">
+                {currentSpread + 1}/{totalSpreads}
               </span>
             )}
             
@@ -360,62 +364,45 @@ const CustomerViewer = () => {
               disabled={currentSpread === totalSpreads - 1}
               size="sm"
               variant="ghost"
-              className="text-white hover:bg-white/20 h-8 w-8 sm:h-10 sm:w-10 p-0"
+              className="text-white hover:bg-white/20 h-7 w-7 sm:h-10 sm:w-10 p-0 disabled:opacity-30"
               data-testid="viewer-next-button"
             >
-              <ChevronRight className="w-4 h-4 sm:w-6 sm:h-6" />
+              <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
             </Button>
 
-            <div className="mx-1 sm:mx-2 h-4 sm:h-6 w-px bg-white/20" />
-
-            <Button
-              onClick={() => setZoom(Math.min(zoom + 0.2, 2))}
-              size="sm"
-              variant="ghost"
-              className="text-white hover:bg-white/20 h-8 w-8 sm:h-10 sm:w-10 p-0"
-              data-testid="viewer-zoom-in"
-            >
-              <ZoomIn className="w-3 h-3 sm:w-5 sm:h-5" />
-            </Button>
-
-            <Button
-              onClick={() => setZoom(Math.max(zoom - 0.2, 0.5))}
-              size="sm"
-              variant="ghost"
-              className="text-white hover:bg-white/20 h-8 w-8 sm:h-10 sm:w-10 p-0"
-              data-testid="viewer-zoom-out"
-            >
-              <ZoomOut className="w-3 h-3 sm:w-5 sm:h-5" />
-            </Button>
+            <div className="mx-0.5 sm:mx-2 h-4 sm:h-6 w-px bg-white/20" />
 
             <Button
               onClick={handleRotate}
               size="sm"
               variant="ghost"
-              className="text-white hover:bg-white/20 h-8 w-8 sm:h-10 sm:w-10 p-0"
+              className="text-white hover:bg-white/20 h-7 w-7 sm:h-10 sm:w-10 p-0"
+              title="Rotate 90°"
               data-testid="viewer-rotate"
             >
-              <RotateCw className="w-3 h-3 sm:w-5 sm:h-5" />
+              <RotateCw className="w-4 h-4 sm:w-5 sm:h-5" />
             </Button>
 
             <Button
               onClick={handleFillScreen}
               size="sm"
               variant="ghost"
-              className={`text-white hover:bg-white/20 h-8 w-8 sm:h-10 sm:w-10 p-0 ${fillScreen ? 'bg-white/20' : ''}`}
+              className={`text-white hover:bg-white/20 h-7 w-7 sm:h-10 sm:w-10 p-0 ${fillScreen ? 'bg-white/20' : ''}`}
+              title="Fill Screen"
               data-testid="viewer-fill-screen"
             >
-              <Maximize2 className="w-3 h-3 sm:w-5 sm:h-5" />
+              <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />
             </Button>
 
             <Button
               onClick={handleFullscreen}
               size="sm"
               variant="ghost"
-              className={`text-white hover:bg-white/20 h-8 w-8 sm:h-10 sm:w-10 p-0 ${isFullscreen ? 'bg-white/20' : ''}`}
+              className={`text-white hover:bg-white/20 h-7 w-7 sm:h-10 sm:w-10 p-0 ${isFullscreen ? 'bg-white/20' : ''}`}
+              title="Fullscreen"
               data-testid="viewer-fullscreen"
             >
-              <Maximize className="w-3 h-3 sm:w-5 sm:h-5" />
+              <Maximize className="w-4 h-4 sm:w-5 sm:h-5" />
             </Button>
 
             {storybook.settings?.soundEnabled && (
@@ -423,10 +410,11 @@ const CustomerViewer = () => {
                 onClick={() => setSoundOn(!soundOn)}
                 size="sm"
                 variant="ghost"
-                className="text-white hover:bg-white/20 h-8 w-8 sm:h-10 sm:w-10 p-0"
+                className="text-white hover:bg-white/20 h-7 w-7 sm:h-10 sm:w-10 p-0"
+                title={soundOn ? "Mute" : "Unmute"}
                 data-testid="viewer-sound-toggle"
               >
-                {soundOn ? <Volume2 className="w-3 h-3 sm:w-5 sm:h-5" /> : <VolumeX className="w-3 h-3 sm:w-5 sm:h-5" />}
+                {soundOn ? <Volume2 className="w-4 h-4 sm:w-5 sm:h-5" /> : <VolumeX className="w-4 h-4 sm:w-5 sm:h-5" />}
               </Button>
             )}
           </div>
