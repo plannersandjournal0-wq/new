@@ -65,7 +65,7 @@ class StorybookSettings(BaseModel):
     twoPageEffect: str = "Hardcover Classic"
     mobilePreferredEffect: str = "StoryParallax"
     soundEnabled: bool = True
-    defaultSound: str = "Classic Paper"
+    defaultSound: str = "Sound 2"
     soundVolume: float = 0.7
     perSpreadSoundMap: Dict[str, Dict[str, str]] = {}
     navLayout: str = "AirBar"
