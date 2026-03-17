@@ -9,7 +9,6 @@ import { Slider } from '@/components/ui/slider';
 
 const SettingsPanel = ({ settings, updateSettings }) => {
   const [expandedSections, setExpandedSections] = useState({
-    viewMode: true,
     effects: true,
     sound: false,
     navigation: false,
@@ -29,30 +28,6 @@ const SettingsPanel = ({ settings, updateSettings }) => {
         <h3 className="font-serif text-xl text-magical-ink mb-4">
           Customize Flipbook
         </h3>
-
-        <Section 
-          title="View Mode" 
-          expanded={expandedSections.viewMode}
-          onToggle={() => toggleSection('viewMode')}
-        >
-          <div className="space-y-3">
-            <div>
-              <Label className="text-sm font-sans text-magical-ink">Default View</Label>
-              <Select 
-                value={settings.defaultViewMode} 
-                onValueChange={(value) => updateSettings('defaultViewMode', value)}
-              >
-                <SelectTrigger className="mt-1" data-testid="default-view-mode-select">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="one-page">One-Page Spread</SelectItem>
-                  <SelectItem value="two-page">Two-Page Spread</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </Section>
 
         <Section 
           title="Flip Effects" 
@@ -281,7 +256,7 @@ const SettingsPanel = ({ settings, updateSettings }) => {
             </div>
 
             <div>
-              <Label className="text-sm font-sans text-magical-ink">Toolbar Style</Label>
+              <Label className="text-sm font-sans text-magical-ink">Navigation Appearance</Label>
               <Select 
                 value={settings.toolbarStyle} 
                 onValueChange={(value) => updateSettings('toolbarStyle', value)}
@@ -290,12 +265,15 @@ const SettingsPanel = ({ settings, updateSettings }) => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Glass">Glass</SelectItem>
+                  <SelectItem value="Glass">Glass (Translucent blur)</SelectItem>
                   <SelectItem value="Solid Dark">Solid Dark</SelectItem>
                   <SelectItem value="Soft Light">Soft Light</SelectItem>
                   <SelectItem value="Invisible Minimal">Invisible Minimal</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-magical-plum mt-1">
+                Controls the visual style of navigation toolbar
+              </p>
             </div>
           </div>
         </Section>

@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { 
   Upload, Search, BookOpen, Eye, Share2, Edit, Copy, Archive, 
-  Trash2, LogOut, Plus, Filter, Clock, MoreVertical 
+  Trash2, LogOut, Plus, Filter, Clock, MoreVertical, Menu, X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +24,8 @@ const Dashboard = () => {
   const [uploadSubtitle, setUploadSubtitle] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -99,8 +101,8 @@ const Dashboard = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this storybook? This cannot be undone.')) return;
-
+    setDeleteConfirmId(null);
+    
     try {
       await api.deleteStorybook(id);
       toast.success('Storybook deleted');
@@ -119,18 +121,28 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-magical-cream texture-paper">
       <header className="border-b border-magical-moon/30 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 py-4 flex items-center justify-between gap-4">
+          {/* Mobile hamburger */}
+          <Button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            variant="ghost"
+            className="md:hidden text-magical-plum hover:text-magical-ink p-2"
+            data-testid="mobile-menu-button"
+          >
+            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </Button>
+
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-magical-ink rounded-full flex items-center justify-center">
               <BookOpen className="w-5 h-5 text-magical-cream" />
             </div>
-            <h1 className="text-2xl font-serif text-magical-ink" data-testid="dashboard-heading">
+            <h1 className="hidden sm:block text-xl sm:text-2xl font-serif text-magical-ink" data-testid="dashboard-heading">
               Storybook Vault
             </h1>
           </div>
 
-          <div className="flex-1 max-w-md mx-8">
-            <div className="relative">
+          <div className="hidden md:flex flex-1 max-w-md mx-4">
+            <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-magical-plum/50" />
               <Input
                 type="text"
@@ -146,27 +158,70 @@ const Dashboard = () => {
           <Button
             onClick={() => logout()}
             variant="ghost"
-            className="text-magical-plum hover:text-magical-ink"
+            className="hidden md:flex text-magical-plum hover:text-magical-ink"
             data-testid="logout-button"
           >
             <LogOut className="w-4 h-4 mr-2" />
             Logout
           </Button>
         </div>
+
+        {/* Mobile search bar */}
+        <div className="md:hidden px-4 pb-4">
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-magical-plum/50" />
+            <Input
+              type="text"
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 bg-white/50 border-magical-moon/20 rounded-full"
+            />
+          </div>
+        </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-8 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex gap-2">
+      {/* Mobile menu drawer */}
+      {mobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMobileMenuOpen(false)}>
+          <div className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 space-y-4">
+              <h2 className="text-xl font-serif text-magical-ink mb-6">Menu</h2>
+              <Button
+                onClick={() => {
+                  setUploadDialogOpen(true);
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full justify-start bg-magical-ink text-magical-cream hover:bg-magical-plum"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Upload New
+              </Button>
+              <Button
+                onClick={() => logout()}
+                variant="outline"
+                className="w-full justify-start border-magical-moon/20"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Logout
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-6 sm:py-8">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-6 sm:mb-8">
+          <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
             {['all', 'draft', 'ready', 'archived'].map((status) => (
               <Button
                 key={status}
                 onClick={() => setStatusFilter(status)}
                 variant={statusFilter === status ? 'default' : 'outline'}
-                className={statusFilter === status 
+                className={`whitespace-nowrap ${statusFilter === status 
                   ? 'bg-magical-ink text-magical-cream rounded-full' 
                   : 'bg-white border-magical-moon/20 text-magical-ink rounded-full hover:bg-magical-cream'
-                }
+                }`}
                 data-testid={`filter-${status}`}
               >
                 {status.charAt(0).toUpperCase() + status.slice(1)}
@@ -176,7 +231,7 @@ const Dashboard = () => {
 
           <Button
             onClick={() => setUploadDialogOpen(true)}
-            className="bg-gradient-to-r from-magical-rose to-magical-gold text-white font-serif tracking-widest uppercase text-sm px-8 py-6 rounded-full shadow-glow hover:shadow-lg hover:scale-105 transition-all duration-300"
+            className="w-full sm:w-auto bg-gradient-to-r from-magical-rose to-magical-gold text-white font-serif tracking-widest uppercase text-xs sm:text-sm px-6 sm:px-8 py-5 sm:py-6 rounded-full shadow-glow hover:shadow-lg hover:scale-105 transition-all duration-300"
             data-testid="upload-new-button"
           >
             <Plus className="w-5 h-5 mr-2" />
@@ -185,8 +240,12 @@ const Dashboard = () => {
         </div>
 
         {loading ? (
-          <div className="text-center py-20">
-            <div className="inline-block w-8 h-8 border-4 border-magical-plum border-t-transparent rounded-full animate-spin" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-white rounded-xl shadow-soft overflow-hidden border border-magical-ink/5 aspect-[4/3] animate-pulse">
+                <div className="w-full h-full bg-magical-moon/20" />
+              </div>
+            ))}
           </div>
         ) : filteredStorybooks.length === 0 ? (
           <div className="text-center py-20">
@@ -210,12 +269,12 @@ const Dashboard = () => {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
             {filteredStorybooks.map((storybook) => (
               <StorybookCard
                 key={storybook.id}
                 storybook={storybook}
-                onDelete={handleDelete}
+                onDelete={(id) => setDeleteConfirmId(id)}
                 onShare={copyShareLink}
                 onEdit={(id) => navigate(`/admin/studio/${id}`)}
               />
@@ -223,6 +282,35 @@ const Dashboard = () => {
           </div>
         )}
       </div>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
+        <DialogContent className="sm:max-w-md bg-white">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-2xl text-magical-ink">
+              Delete Storybook?
+            </DialogTitle>
+            <DialogDescription className="font-sans text-magical-plum">
+              This action cannot be undone. The storybook and all its data will be permanently deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 mt-4">
+            <Button
+              onClick={() => setDeleteConfirmId(null)}
+              variant="outline"
+              className="flex-1 rounded-full border-magical-moon/20"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => handleDelete(deleteConfirmId)}
+              className="flex-1 bg-red-600 text-white hover:bg-red-700 rounded-full"
+            >
+              Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
         <DialogContent className="sm:max-w-md bg-white">
