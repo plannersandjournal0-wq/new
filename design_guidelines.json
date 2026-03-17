@@ -1,0 +1,188 @@
+{
+  "identity": {
+    "name": "Storybook Vault",
+    "persona": "E1: The Anti-AI Designer",
+    "tone": "Magical, Cinematic, Warm, Premium, Intimate",
+    "archetype": "Luxury & Organic Fusion"
+  },
+  "typography": {
+    "font_families": {
+      "headings": {
+        "name": "Playfair Display",
+        "fallback": "serif",
+        "weights": ["400", "600", "700"],
+        "usage": "All headings, cover titles, dramatic statements"
+      },
+      "body": {
+        "name": "Manrope",
+        "fallback": "sans-serif",
+        "weights": ["300", "400", "500", "600"],
+        "usage": "UI text, settings panels, buttons, long-form content"
+      },
+      "accent": {
+        "name": "Cormorant Garamond",
+        "fallback": "serif",
+        "weights": ["400", "500", "600"],
+        "usage": "Italicized quotes, 'magical' whispers, testimonials"
+      }
+    },
+    "scale": {
+      "h1": "text-5xl md:text-7xl font-serif tracking-tight leading-none",
+      "h2": "text-3xl md:text-5xl font-serif tracking-tight",
+      "h3": "text-2xl md:text-3xl font-serif font-medium",
+      "body_lg": "text-lg md:text-xl font-sans leading-relaxed",
+      "body_base": "text-base font-sans leading-relaxed",
+      "caption": "text-sm font-sans tracking-wide text-muted-foreground uppercase"
+    }
+  },
+  "colors": {
+    "palette": {
+      "midnight_ink": "#1C2340",
+      "story_plum": "#5B496E",
+      "velvet_rose": "#B78497",
+      "warm_cream": "#F7F1E8",
+      "moon_gray": "#D8DCE6",
+      "dusty_gold": "#C9A86A",
+      "soft_coral": "#E39A8D",
+      "mist_teal": "#7FA8A3"
+    },
+    "theme_modes": {
+      "admin_dashboard": {
+        "background": "#F7F1E8",
+        "foreground": "#1C2340",
+        "card_bg": "#FFFFFF",
+        "border": "#D8DCE6",
+        "primary": "#1C2340",
+        "secondary": "#B78497"
+      },
+      "viewer_cinema": {
+        "background": "#1C2340",
+        "foreground": "#F7F1E8",
+        "card_bg": "#2A3252",
+        "border": "#5B496E",
+        "primary": "#C9A86A",
+        "secondary": "#7FA8A3"
+      }
+    },
+    "tailwind_extension": {
+      "colors": {
+        "magical": {
+          "ink": "#1C2340",
+          "plum": "#5B496E",
+          "rose": "#B78497",
+          "cream": "#F7F1E8",
+          "gold": "#C9A86A",
+          "teal": "#7FA8A3"
+        }
+      }
+    }
+  },
+  "visual_enhancers": {
+    "radius": {
+      "default": "rounded-xl",
+      "card": "rounded-2xl",
+      "button": "rounded-full"
+    },
+    "shadows": {
+      "soft": "0 4px 20px -2px rgba(28, 35, 64, 0.08)",
+      "floating": "0 12px 40px -4px rgba(28, 35, 64, 0.15)",
+      "glow": "0 0 20px rgba(201, 168, 106, 0.4)"
+    },
+    "textures": {
+      "paper": "url('https://www.transparenttextures.com/patterns/cream-paper.png')",
+      "noise": "url('data:image/svg+xml,...')"
+    }
+  },
+  "layout_strategy": {
+    "admin_dashboard": {
+      "type": "Bento Grid",
+      "gap": "gap-8",
+      "padding": "p-8 md:p-12",
+      "structure": "Sidebar (collapsible) + Main Content Area"
+    },
+    "preview_studio": {
+      "type": "3-Panel Studio",
+      "left_panel": "w-80 border-r bg-white/80 backdrop-blur (Settings)",
+      "center_panel": "flex-1 bg-magical-ink flex items-center justify-center (Live Preview)",
+      "right_panel": "w-72 border-l bg-white/50 (Actions/Publish)"
+    },
+    "customer_viewer": {
+      "type": "Immersive Theater",
+      "structure": "Fullscreen container, centered flipbook, auto-hiding controls"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-magical-ink text-magical-cream hover:bg-magical-plum transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 px-8 py-3 rounded-full font-serif tracking-wide",
+      "secondary": "bg-white border border-magical-ink/20 text-magical-ink hover:bg-magical-cream transition-all px-6 py-3 rounded-full font-sans",
+      "magic": "bg-gradient-to-r from-magical-rose to-magical-gold text-white font-serif tracking-widest uppercase text-sm px-8 py-4 rounded-full shadow-glow hover:shadow-lg hover:scale-105 transition-all duration-300"
+    },
+    "cards": {
+      "storybook_card": "group relative bg-white rounded-xl shadow-soft hover:shadow-floating transition-all duration-500 overflow-hidden border border-magical-ink/5 aspect-[4/3]",
+      "glass_panel": "bg-white/70 backdrop-blur-xl border border-white/40 shadow-sm"
+    },
+    "inputs": {
+      "style": "bg-white/50 border-magical-ink/10 focus:border-magical-rose focus:ring-1 focus:ring-magical-rose rounded-lg p-3 font-sans transition-all"
+    }
+  },
+  "motion": {
+    "principles": ["Slow & Smooth", "Paper-like Physics", "Staggered Entrance"],
+    "transitions": {
+      "page_flip": "transform-style: preserve-3d; transition: transform 0.6s cubic-bezier(0.645, 0.045, 0.355, 1)",
+      "hover_lift": "transition-transform duration-300 ease-out hover:-translate-y-2",
+      "fade_in": "animate-in fade-in duration-700 ease-out"
+    }
+  },
+  "accessibility": {
+    "contrast": "Ensure text-to-background ratio > 4.5:1",
+    "focus": "Visible ring-2 ring-magical-gold ring-offset-2",
+    "reduced_motion": "Disable page flip animations if prefers-reduced-motion is true"
+  },
+  "assets": {
+    "images": {
+      "login_bg": {
+        "url": "https://images.unsplash.com/photo-1759731224815-87d2706c076c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODh8MHwxfHNlYXJjaHwzfHxjb3p5JTIwbWFnaWNhbCUyMGxpYnJhcnklMjByZWFkaW5nJTIwbm9vayUyMHdhcm0lMjBsaWdodGluZ3xlbnwwfHx8fDE3NzM3NDkzMTJ8MA&ixlib=rb-4.1.0&q=85",
+        "alt": "Grand magical library with warm lighting",
+        "usage": "Login page background with overlay"
+      },
+      "demo_cover": {
+        "url": "https://images.unsplash.com/photo-1576495169018-bd2414046c6b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDB8MHwxfHNlYXJjaHw0fHxtYWdpY2FsJTIwZmFudGFzeSUyMHN0b3J5Ym9vayUyMGlsbHVzdHJhdGlvbiUyMGxhbmRzY2FwZXxlbnwwfHx8fDE3NzM3NDkzMTV8MA&ixlib=rb-4.1.0&q=85",
+        "alt": "Fairy tale illustration",
+        "usage": "Default cover for demo storybook"
+      },
+      "texture_overlay": {
+        "url": "https://www.transparenttextures.com/patterns/cream-paper.png",
+        "usage": "Global background texture for Admin"
+      }
+    },
+    "icons": {
+      "library": "lucide-react"
+    }
+  },
+  "libraries": {
+    "3d_effects": "react-pageflip (or custom CSS 3D transforms if unavailable)",
+    "animations": "framer-motion",
+    "notifications": "sonner",
+    "icons": "lucide-react"
+  },
+  "instructions_to_main_agent": [
+    "1. Setup Tailwind config first with the 'magical' color palette.",
+    "2. Create the 'Admin Layout' (Warm Cream bg) and 'Viewer Layout' (Midnight Ink bg) as separate layout components.",
+    "3. Implement the 'Preview Studio' with a strict 3-panel grid. Left=Controls, Center=Stage, Right=Actions.",
+    "4. Use 'Playfair Display' for all headings. Import it from Google Fonts via simple CSS import.",
+    "5. For the flipbook effect, prioritize 'HTML/CSS 3D Transforms' if a library is too heavy, but 'react-pageflip' is recommended if available.",
+    "6. Ensure the mobile view defaults to 'One Page Spread' while desktop defaults to 'Two Page Spread'.",
+    "7. Add 'data-testid' to every interactive element (buttons, inputs, flip controls).",
+    "8. NEVER use default blue links. Use Magical Rose or Dusty Gold.",
+    "9. Use the Grand Library image for the Login page with a heavy dark overlay (bg-black/60) to ensure text readability."
+  ],
+  "universal_guidelines": [
+    "Do not use generic gradients.",
+    "Create depth through layered design elements.",
+    "Every interaction needs micro-animations.",
+    "Use 2-3x more spacing than feels comfortable.",
+    "Subtle grain textures and noise overlays.",
+    "All interactive elements MUST include data-testid.",
+    "Do not center align the App container."
+  ]
+}
