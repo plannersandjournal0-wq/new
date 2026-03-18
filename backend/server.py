@@ -149,7 +149,7 @@ def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
 async def convert_pdf_to_spreads(pdf_path: str, storybook_id: str) -> tuple:
-    """Convert PDF to image spreads"""
+    """Convert PDF to image spreads with optimization for web delivery"""
     try:
         doc = fitz.open(pdf_path)
         spread_dir = SPREADS_DIR / storybook_id
@@ -166,18 +166,31 @@ async def convert_pdf_to_spreads(pdf_path: str, storybook_id: str) -> tuple:
                 if page.rect.width < page.rect.height:
                     orientation = "portrait"
             
-            # Render page to image at high quality
-            mat = fitz.Matrix(2.0, 2.0)  # 2x zoom for quality
+            # Optimize: 1.5x zoom instead of 2x (better balance of quality/size)
+            mat = fitz.Matrix(1.5, 1.5)
             pix = page.get_pixmap(matrix=mat)
             
             # Convert to PIL Image
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
             
-            # Save as JPEG with high quality
-            spread_path = spread_dir / f"spread_{page_num}.jpg"
-            img.save(spread_path, "JPEG", quality=90, optimize=True)
+            # Resize if too large (max 1920px width for landscape, 1080px for portrait)
+            max_width = 1920 if orientation == "landscape" else 1080
+            if img.width > max_width:
+                ratio = max_width / img.width
+                new_height = int(img.height * ratio)
+                img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
             
-            spreads.append(f"/api/spreads/{storybook_id}/spread_{page_num}.jpg")
+            # Save as WebP with good compression (smaller files, better quality)
+            spread_path_webp = spread_dir / f"spread_{page_num}.webp"
+            spread_path_jpg = spread_dir / f"spread_{page_num}.jpg"
+            
+            # Save WebP (primary format - 70% smaller than JPEG)
+            img.save(spread_path_webp, "WEBP", quality=85, method=6)
+            
+            # Save JPEG fallback (for older browsers)
+            img.save(spread_path_jpg, "JPEG", quality=80, optimize=True, progressive=True)
+            
+            spreads.append(f"/api/spreads/{storybook_id}/spread_{page_num}.webp")
         
         doc.close()
         
@@ -337,7 +350,14 @@ async def get_spread(storybook_id: str, filename: str):
     if not spread_path.exists():
         raise HTTPException(status_code=404, detail="Spread not found")
     
-    return FileResponse(spread_path)
+    # Add aggressive caching headers for spread images
+    headers = {
+        "Cache-Control": "public, max-age=31536000, immutable",  # Cache for 1 year
+        "ETag": f'"{storybook_id}-{filename}"',
+        "Accept-Ranges": "bytes"
+    }
+    
+    return FileResponse(spread_path, headers=headers)
 
 @api_router.get("/uploads/{filename}")
 async def get_upload(filename: str):
