@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { api, getImageUrl } from '@/lib/api';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronUp, ChevronDown, Volume2, VolumeX, Lock, Maximize2, Minimize2, Hash, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Volume2, VolumeX, Lock, Maximize2, Minimize2, Hash, X, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { playSound } from '@/lib/sounds';
@@ -20,11 +20,16 @@ const CustomerViewer = () => {
   const [showControls, setShowControls] = useState(true);
   const [soundOn, setSoundOn] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [isPortrait, setIsPortrait] = useState(window.innerHeight > window.innerWidth);
   const [showGoTo, setShowGoTo] = useState(false);
   const [goToValue, setGoToValue] = useState('');
   const [shakeGoTo, setShakeGoTo] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  
+  // Simplified state - only what's needed
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isLandscapeMode, setIsLandscapeMode] = useState(false);
+  const [showRotateHint, setShowRotateHint] = useState(false);
+  const rotateHintShownRef = useRef(false);
   
   const viewerRef = useRef(null);
   const hideControlsTimerRef = useRef(null);
@@ -33,20 +38,18 @@ const CustomerViewer = () => {
   const loadingImages = useRef(new Set());
   const goToRef = useRef(null);
 
+  // Load storybook and handle resize
   useEffect(() => {
     loadStorybook();
     
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
-      setIsPortrait(window.innerHeight > window.innerWidth);
     };
     
     window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleResize);
     
     return () => {
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleResize);
     };
   }, [slug]);
 
@@ -63,14 +66,45 @@ const CustomerViewer = () => {
     };
   }, [authenticated, storybook]);
 
-  // Fullscreen change listener
+  // Fullscreen change listener - handles both button clicks and system exits (swipe down, back button)
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      const isNowFullscreen = !!document.fullscreenElement;
+      setIsFullscreen(isNowFullscreen);
+      
+      // If user exited fullscreen (by any method), clean up landscape mode
+      if (!isNowFullscreen) {
+        const isMobileDevice = window.innerWidth < 768 || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        if (isMobileDevice && screen.orientation?.unlock) {
+          try {
+            screen.orientation.unlock();
+          } catch (e) {
+            // Silently ignore unlock errors
+          }
+        }
+        setIsLandscapeMode(false);
+      }
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  // Cleanup on unmount - unlock orientation and exit fullscreen
+  useEffect(() => {
+    return () => {
+      try {
+        if (screen.orientation?.unlock) screen.orientation.unlock();
+        if (document.fullscreenElement) document.exitFullscreen();
+      } catch (e) {
+        // Silently ignore cleanup errors
+      }
+    };
   }, []);
 
   // Close GoTo popup on outside click
@@ -187,6 +221,7 @@ const CustomerViewer = () => {
 
   const goToPrevious = () => {
     if (currentSpread > 0) {
+      setImageLoaded(false);
       setCurrentSpread(currentSpread - 1);
       if (soundOn && storybook.settings?.soundEnabled && storybook.settings?.defaultSound) {
         setTimeout(() => {
@@ -199,6 +234,7 @@ const CustomerViewer = () => {
 
   const goToNext = () => {
     if (currentSpread < storybook.spreads.length - 1) {
+      setImageLoaded(false);
       setCurrentSpread(currentSpread + 1);
       if (soundOn && storybook.settings?.soundEnabled && storybook.settings?.defaultSound) {
         setTimeout(() => {
@@ -214,13 +250,12 @@ const CustomerViewer = () => {
     const totalSpreads = storybook.spreads.length;
 
     if (isNaN(pageNum) || pageNum < 1 || pageNum > totalSpreads) {
-      // Shake animation
       setShakeGoTo(true);
       setTimeout(() => setShakeGoTo(false), 500);
       return;
     }
 
-    // Navigate to page
+    setImageLoaded(false);
     setCurrentSpread(pageNum - 1);
     if (soundOn && storybook.settings?.soundEnabled && storybook.settings?.defaultSound) {
       setTimeout(() => {
@@ -228,23 +263,63 @@ const CustomerViewer = () => {
       }, 50);
     }
 
-    // Close popup
     setShowGoTo(false);
     setGoToValue('');
     resetHideControlsTimer();
   };
 
+  // Clean fullscreen handler with orientation lock for mobile
   const handleFullscreen = async () => {
     if (!viewerRef.current) return;
+    
+    const isMobileDevice = window.innerWidth < 768 || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
     try {
-      if (!document.fullscreenElement) {
-        await viewerRef.current.requestFullscreen();
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        // Enter fullscreen
+        if (viewerRef.current.requestFullscreen) {
+          await viewerRef.current.requestFullscreen();
+        } else if (viewerRef.current.webkitRequestFullscreen) {
+          await viewerRef.current.webkitRequestFullscreen();
+        }
+        
+        // On mobile: also lock orientation to landscape
+        if (isMobileDevice && screen.orientation?.lock) {
+          try {
+            await screen.orientation.lock('landscape');
+            setIsLandscapeMode(true);
+          } catch (orientationErr) {
+            // iOS Safari: orientation lock not supported
+            // Show rotate hint only once per session on iOS
+            if (isIOS && !rotateHintShownRef.current) {
+              rotateHintShownRef.current = true;
+              setShowRotateHint(true);
+              setTimeout(() => setShowRotateHint(false), 3000);
+            }
+            console.log('Orientation lock not supported on this device');
+          }
+        }
       } else {
-        await document.exitFullscreen();
+        // Exit fullscreen
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          await document.webkitExitFullscreen();
+        }
+        
+        // On mobile: unlock orientation
+        if (isMobileDevice && screen.orientation?.unlock) {
+          try {
+            screen.orientation.unlock();
+          } catch (e) {
+            // Silently ignore
+          }
+        }
+        setIsLandscapeMode(false);
       }
     } catch (error) {
-      toast.error('Fullscreen not supported');
+      console.log('Fullscreen error:', error.message);
     }
     resetHideControlsTimer();
   };
@@ -279,30 +354,109 @@ const CustomerViewer = () => {
     }
   };
 
-  // Mobile vertical left nav
-  const getMobileVerticalNav = () => {
-    const totalSpreads = storybook.spreads.length;
-    const toolbarStyle = storybook.settings?.toolbarStyle || 'Glass';
+  // Helper function for toolbar styling
+  const getToolbarStyles = () => {
+    const toolbarStyle = storybook?.settings?.toolbarStyle || 'Glass';
     
-    const getToolbarBg = () => {
-      switch (toolbarStyle) {
-        case 'Solid Dark':
-          return 'bg-black/90';
-        case 'Soft Light':
-          return 'bg-white/90';
-        case 'Invisible Minimal':
-          return 'bg-black/30';
-        case 'Glass':
-        default:
-          return 'bg-black/70 backdrop-blur-xl';
-      }
-    };
+    let bg, textColor;
+    switch (toolbarStyle) {
+      case 'Solid Dark':
+        bg = 'bg-black/90';
+        textColor = 'text-white';
+        break;
+      case 'Soft Light':
+        bg = 'bg-white/90';
+        textColor = 'text-magical-ink';
+        break;
+      case 'Invisible Minimal':
+        bg = 'bg-black/30';
+        textColor = 'text-white';
+        break;
+      case 'Glass':
+      default:
+        bg = 'bg-black/70 backdrop-blur-xl';
+        textColor = 'text-white';
+    }
+    
+    return { bg, textColor };
+  };
 
-    const toolbarBg = getToolbarBg();
-    const textColor = toolbarStyle === 'Soft Light' ? 'text-magical-ink' : 'text-white';
+  // Mobile Portrait Bottom Nav - horizontal bar at bottom (above Emergent badge)
+  const getMobilePortraitNav = () => {
+    const totalSpreads = storybook.spreads.length;
+    const { bg, textColor } = getToolbarStyles();
+    const dividerColor = textColor === 'text-magical-ink' ? 'bg-magical-ink/20' : 'bg-white/20';
 
     return (
-      <div className={`fixed left-3 top-1/2 -translate-y-1/2 z-20 ${toolbarBg} rounded-full py-3 px-1 flex flex-col items-center gap-1 shadow-2xl border border-white/10`}>
+      <div className={`fixed bottom-14 left-4 right-4 z-20 ${bg} flex items-center justify-center gap-3 px-4 py-2.5 rounded-full border border-white/10 shadow-2xl`}>
+        <Button
+          onClick={goToPrevious}
+          disabled={currentSpread === 0}
+          size="sm"
+          variant="ghost"
+          className={`${textColor} hover:bg-white/20 h-9 w-9 p-0 rounded-full disabled:opacity-30`}
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </Button>
+
+        {storybook.settings?.showPageNumbers && (
+          <span className={`${textColor} font-sans text-xs px-1`}>
+            {currentSpread + 1}/{totalSpreads}
+          </span>
+        )}
+
+        <Button
+          onClick={goToNext}
+          disabled={currentSpread === totalSpreads - 1}
+          size="sm"
+          variant="ghost"
+          className={`${textColor} hover:bg-white/20 h-9 w-9 p-0 rounded-full disabled:opacity-30`}
+        >
+          <ChevronRight className="w-5 h-5" />
+        </Button>
+
+        <div className={`w-px h-5 ${dividerColor}`} />
+
+        <Button
+          onClick={() => { setShowGoTo(!showGoTo); resetHideControlsTimer(); }}
+          size="sm"
+          variant="ghost"
+          className={`${textColor} hover:bg-white/20 h-9 w-9 p-0 rounded-full`}
+        >
+          <Hash className="w-4 h-4" />
+        </Button>
+
+        <Button
+          onClick={handleFullscreen}
+          size="sm"
+          variant="ghost"
+          className={`${textColor} hover:bg-white/20 h-9 w-9 p-0 rounded-full`}
+        >
+          <Maximize2 className="w-4 h-4" />
+        </Button>
+
+        {storybook.settings?.soundEnabled && (
+          <Button
+            onClick={() => setSoundOn(!soundOn)}
+            size="sm"
+            variant="ghost"
+            className={`${textColor} hover:bg-white/20 h-9 w-9 p-0 rounded-full`}
+          >
+            {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+          </Button>
+        )}
+      </div>
+    );
+  };
+
+  // Mobile Landscape Vertical Left Nav - vertical bar on left side
+  const getMobileVerticalNav = () => {
+    const totalSpreads = storybook.spreads.length;
+    const { bg, textColor } = getToolbarStyles();
+    const dividerColor = textColor === 'text-magical-ink' ? 'bg-magical-ink/20' : 'bg-white/20';
+
+    return (
+      <div className={`fixed left-3 top-1/2 -translate-y-1/2 z-20 ${bg} rounded-full py-3 px-1 flex flex-col items-center gap-1 shadow-2xl border border-white/10`}>
         <Button
           onClick={goToPrevious}
           disabled={currentSpread === 0}
@@ -329,13 +483,10 @@ const CustomerViewer = () => {
           <ChevronDown className="w-5 h-5" />
         </Button>
 
-        <div className={`w-6 h-px my-1 ${toolbarStyle === 'Soft Light' ? 'bg-magical-ink/20' : 'bg-white/20'}`} />
+        <div className={`w-6 h-px my-1 ${dividerColor}`} />
 
         <Button
-          onClick={() => {
-            setShowGoTo(!showGoTo);
-            resetHideControlsTimer();
-          }}
+          onClick={() => { setShowGoTo(!showGoTo); resetHideControlsTimer(); }}
           size="sm"
           variant="ghost"
           className={`${textColor} hover:bg-white/20 h-10 w-10 p-0 rounded-full`}
@@ -363,7 +514,7 @@ const CustomerViewer = () => {
           </Button>
         )}
 
-        <div className={`w-6 h-px my-1 ${toolbarStyle === 'Soft Light' ? 'bg-magical-ink/20' : 'bg-white/20'}`} />
+        <div className={`w-6 h-px my-1 ${dividerColor}`} />
       </div>
     );
   };
@@ -371,31 +522,13 @@ const CustomerViewer = () => {
   // Desktop navigation (unchanged)
   const getDesktopNavigation = () => {
     const navStyle = storybook.settings?.navLayout || 'AirBar';
-    const toolbarStyle = storybook.settings?.toolbarStyle || 'Glass';
     const totalSpreads = storybook.spreads.length;
+    const { bg, textColor } = getToolbarStyles();
 
-    const getToolbarBg = () => {
-      switch (toolbarStyle) {
-        case 'Solid Dark':
-          return 'bg-black/90';
-        case 'Soft Light':
-          return 'bg-white/90 text-magical-ink';
-        case 'Invisible Minimal':
-          return 'bg-black/30';
-        case 'Glass':
-        default:
-          return 'bg-black/70 backdrop-blur-xl';
-      }
-    };
-
-    const toolbarBg = getToolbarBg();
-    const textColor = toolbarStyle === 'Soft Light' ? 'text-magical-ink' : 'text-white';
-
-    // Navigation components (same as before for desktop)
     switch (navStyle) {
       case 'CinemaDock':
         return (
-          <div className={`absolute bottom-0 left-0 right-0 flex items-center justify-center gap-4 ${toolbarBg} px-8 py-4 border-t border-white/10`}>
+          <div className={`absolute bottom-0 left-0 right-0 flex items-center justify-center gap-4 ${bg} px-8 py-4 border-t border-white/10`}>
             <Button onClick={goToPrevious} disabled={currentSpread === 0} size="sm" variant="ghost" className={`${textColor} hover:bg-white/20 h-10 w-10 p-0`}>
               <ChevronUp className="w-6 h-6" />
             </Button>
@@ -434,7 +567,7 @@ const CustomerViewer = () => {
 
       default:
         return (
-          <div className={`absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2 ${toolbarBg} px-4 py-3 rounded-full border border-white/10 shadow-2xl`}>
+          <div className={`absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2 ${bg} px-4 py-3 rounded-full border border-white/10 shadow-2xl`}>
             <Button onClick={goToPrevious} disabled={currentSpread === 0} size="sm" variant="ghost" className={`${textColor} hover:bg-white/20 h-9 w-9 p-0`}>
               <ChevronUp className="w-6 h-6" />
             </Button>
@@ -453,6 +586,17 @@ const CustomerViewer = () => {
             )}
           </div>
         );
+    }
+  };
+
+  // Determine GoTo popup positioning based on mode
+  const getGoToPopupClass = () => {
+    if (isMobile && isLandscapeMode) {
+      // Landscape mode: position to the right of left nav
+      return "fixed left-16 top-1/2 -translate-y-1/2 z-30";
+    } else {
+      // Portrait mode (or desktop): position above bottom nav
+      return "fixed bottom-28 left-1/2 -translate-x-1/2 z-30";
     }
   };
 
@@ -526,31 +670,45 @@ const CustomerViewer = () => {
   }
 
   const themeBackground = storybook.settings?.themePreset === 'Midnight Navy' ? '#1C2340' : '#F7F1E8';
-  const currentImageCached = imageCache.current.has(currentSpread);
+  
+  // Track if image is ready (either from cache or just loaded)
+  const isImageReady = imageCache.current.has(currentSpread) || imageLoaded;
 
-  // Apply forced landscape transform on mobile portrait
-  const shouldForceLandscape = isMobile && isPortrait;
-  const landscapeStyles = shouldForceLandscape ? {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    width: '100vh',
-    height: '100vw',
-    transform: 'rotate(90deg) translateY(-100%)',
-    transformOrigin: 'top left',
-    overflow: 'hidden'
-  } : {};
+  // Image sizing - give more room for bottom nav in mobile portrait
+  const imageMaxHeight = isMobile && !isLandscapeMode ? '75vh' : '88vh';
+
+  // Reset imageLoaded when spread changes
+  const handleImageLoad = () => {
+    imageCache.current.set(currentSpread, true);
+    setImageLoaded(true);
+  };
 
   return (
     <div 
       ref={viewerRef}
       className="min-h-screen relative flex flex-col"
-      style={{ backgroundColor: themeBackground, ...landscapeStyles }}
+      style={{ backgroundColor: themeBackground }}
       onMouseMove={handleUserActivity}
       onTouchMove={handleUserActivity}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
+      {/* iOS Rotate Hint Toast */}
+      <AnimatePresence>
+        {showRotateHint && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-amber-500/90 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 backdrop-blur-sm"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span className="text-sm font-medium">Rotate phone for best experience</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex-1 flex items-center justify-center p-2 sm:p-4 md:p-8 relative overflow-hidden">
         {/* Tap zones */}
         <div className="absolute left-0 top-0 bottom-0 w-[20%] z-10 cursor-pointer" onClick={() => handleTapZone('left')} />
@@ -565,7 +723,7 @@ const CustomerViewer = () => {
             transition={{ duration: 0.2 }}
             className="relative z-0"
           >
-            {!currentImageCached && (
+            {!isImageReady && (
               <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-r from-magical-plum/5 via-magical-rose/5 to-magical-plum/5 rounded-xl z-10 min-w-[300px] min-h-[200px]">
                 <div className="w-8 h-8 border-4 border-magical-gold border-t-transparent rounded-full animate-spin" />
               </div>
@@ -575,11 +733,12 @@ const CustomerViewer = () => {
               src={getImageUrl(storybook.spreads[currentSpread])}
               alt={`Spread ${currentSpread + 1}`}
               loading="eager"
-              className={`shadow-2xl page-shadow transition-opacity duration-200 object-contain ${currentImageCached ? 'opacity-100' : 'opacity-0'}`}
+              onLoad={handleImageLoad}
+              className={`shadow-2xl page-shadow transition-opacity duration-200 object-contain ${isImageReady ? 'opacity-100' : 'opacity-0'}`}
               style={{
                 borderRadius: storybook.settings?.roundedCorners ? `${storybook.settings.cornerRadius}px` : '0px',
                 maxWidth: '95vw',
-                maxHeight: '85vh',
+                maxHeight: imageMaxHeight,
                 width: 'auto',
                 height: 'auto'
               }}
@@ -587,7 +746,7 @@ const CustomerViewer = () => {
           </motion.div>
         </AnimatePresence>
 
-        {/* Navigation - Mobile vertical left nav or Desktop nav */}
+        {/* Navigation - Mobile (portrait/landscape) or Desktop */}
         <AnimatePresence>
           {showControls && (
             <motion.div
@@ -596,7 +755,13 @@ const CustomerViewer = () => {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
             >
-              {isMobile ? getMobileVerticalNav() : getDesktopNavigation()}
+              {isMobile 
+                ? (isLandscapeMode 
+                    ? getMobileVerticalNav()    // Landscape fullscreen: left side vertical nav
+                    : getMobilePortraitNav()    // Portrait default: bottom horizontal nav
+                  )
+                : getDesktopNavigation()        // Desktop: existing nav unchanged
+              }
             </motion.div>
           )}
         </AnimatePresence>
@@ -610,7 +775,7 @@ const CustomerViewer = () => {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
               transition={{ duration: 0.2 }}
-              className={`fixed left-16 top-1/2 -translate-y-1/2 z-30 bg-white rounded-xl shadow-2xl p-3 ${shakeGoTo ? 'animate-shake' : ''}`}
+              className={`${getGoToPopupClass()} bg-white rounded-xl shadow-2xl p-3 ${shakeGoTo ? 'animate-shake' : ''}`}
             >
               <style>{`
                 @keyframes shake {
