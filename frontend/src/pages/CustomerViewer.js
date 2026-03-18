@@ -455,8 +455,8 @@ const CustomerViewer = () => {
     );
   };
 
-  // Mobile Landscape Vertical Left Nav - vertical bar on left side
-  const getMobileVerticalNav = () => {
+  // Mobile Landscape Left Nav - vertical bar on left side (fullscreen mode)
+  const getMobileLandscapeNav = () => {
     const totalSpreads = storybook.spreads.length;
     const { bg, textColor } = getToolbarStyles();
     const dividerColor = textColor === 'text-magical-ink' ? 'bg-magical-ink/20' : 'bg-white/20';
@@ -763,10 +763,13 @@ const CustomerViewer = () => {
             >
               {isMobile 
                 ? (isLandscapeMode 
-                    ? getMobileVerticalNav()    // Landscape fullscreen: left side vertical nav
+                    ? getMobileLandscapeNav()   // Landscape fullscreen: left side vertical nav
                     : getMobilePortraitNav()    // Portrait default: bottom horizontal nav
                   )
-                : getDesktopNavigation()        // Desktop: existing nav unchanged
+                : (isLandscapeMode 
+                    ? getMobileLandscapeNav()   // Mobile device in fullscreen but viewport > 768
+                    : getDesktopNavigation()    // Desktop: existing nav unchanged
+                  )
               }
             </motion.div>
           )}
