@@ -284,20 +284,24 @@ const CustomerViewer = () => {
           await viewerRef.current.webkitRequestFullscreen();
         }
         
-        // On mobile: also lock orientation to landscape
-        if (isMobileDevice && screen.orientation?.lock) {
-          try {
-            await screen.orientation.lock('landscape');
-            setIsLandscapeMode(true);
-          } catch (orientationErr) {
-            // iOS Safari: orientation lock not supported
-            // Show rotate hint only once per session on iOS
-            if (isIOS && !rotateHintShownRef.current) {
-              rotateHintShownRef.current = true;
-              setShowRotateHint(true);
-              setTimeout(() => setShowRotateHint(false), 3000);
+        // On mobile: switch to landscape nav mode and try orientation lock
+        if (isMobileDevice) {
+          // Always switch to landscape nav when entering fullscreen on mobile
+          setIsLandscapeMode(true);
+          
+          // Try to lock orientation (works on Android, fails silently on iOS)
+          if (screen.orientation?.lock) {
+            try {
+              await screen.orientation.lock('landscape');
+            } catch (orientationErr) {
+              // iOS Safari: orientation lock not supported - show rotate hint
+              if (isIOS && !rotateHintShownRef.current) {
+                rotateHintShownRef.current = true;
+                setShowRotateHint(true);
+                setTimeout(() => setShowRotateHint(false), 3000);
+              }
+              console.log('Orientation lock not supported on this device');
             }
-            console.log('Orientation lock not supported on this device');
           }
         }
       } else {
@@ -308,15 +312,17 @@ const CustomerViewer = () => {
           await document.webkitExitFullscreen();
         }
         
-        // On mobile: unlock orientation
-        if (isMobileDevice && screen.orientation?.unlock) {
-          try {
-            screen.orientation.unlock();
-          } catch (e) {
-            // Silently ignore
+        // On mobile: unlock orientation and switch back to portrait nav
+        if (isMobileDevice) {
+          if (screen.orientation?.unlock) {
+            try {
+              screen.orientation.unlock();
+            } catch (e) {
+              // Silently ignore
+            }
           }
+          setIsLandscapeMode(false);
         }
-        setIsLandscapeMode(false);
       }
     } catch (error) {
       console.log('Fullscreen error:', error.message);

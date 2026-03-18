@@ -12,10 +12,10 @@ Storybook Vault is a premium private web app for a single admin to upload storyb
 
 ### Storybook Viewer (CustomerViewer.js)
 - **Navigation Styles**: 5 desktop styles (AirBar, CinemaDock, GhostEdges, etc.)
-- **Mobile Portrait Mode**: Horizontal bottom floating nav bar
-- **Mobile Landscape Mode** (via fullscreen): Vertical left-side nav bar
+- **Mobile Portrait Mode**: Horizontal bottom floating nav bar (default)
+- **Mobile Landscape/Fullscreen Mode**: Vertical left-side nav bar
 - **Touch Gestures**: Swipe to navigate, tap zones for prev/next
-- **Go To Page**: Popup to jump to specific page number
+- **Go To Page**: Popup to jump to specific page number (available in both mobile nav modes)
 - **Fullscreen**: Native browser fullscreen with orientation lock on Android
 - **Sound**: Page-flip sounds with volume control
 - **Password Protection**: Per-storybook password gate
@@ -45,12 +45,14 @@ Storybook Vault is a premium private web app for a single admin to upload storyb
 ### Phase 2 - Mobile Viewer Enhancement (COMPLETE - March 18)
 - [x] **Clean fullscreen + landscape logic** for CustomerViewer.js
   - Default: Portrait mode, horizontal bottom nav
-  - Fullscreen on mobile: Locks to landscape (Android), vertical left nav
-  - Exit fullscreen: Returns to portrait, unlocks orientation
-  - iOS: Shows "rotate phone" toast hint (orientation lock not supported)
+  - Fullscreen on mobile: Switches to left vertical nav (works on ALL browsers including iOS Safari)
+  - `isLandscapeMode` is set to true when entering fullscreen on mobile, regardless of orientation lock support
+  - iOS: Shows "rotate phone" toast hint (orientation lock not supported but nav still switches)
+  - Exit fullscreen: Returns to portrait, bottom horizontal nav
+- [x] **Fixed nav switching logic** - Now correctly switches between portrait and landscape nav modes
+- [x] **Go To Page button** present in both mobile nav modes (portrait bottom and landscape left)
 - [x] Image loading optimization with onLoad handler
-- [x] Go To Page popup with proper positioning
-- [x] Bottom nav positioned above Emergent badge
+- [x] Go To Page popup with proper positioning for both modes
 
 ## Upcoming Tasks (P0-P2)
 
@@ -86,4 +88,5 @@ Storybook Vault is a premium private web app for a single admin to upload storyb
 ## Notes
 - Backend uses in-memory storage (not persistent database)
 - Orientation lock works on Android but not iOS Safari
+- On iOS, the nav still switches to vertical left mode in fullscreen (user can rotate phone manually)
 - Desktop navigation unchanged from original implementation
