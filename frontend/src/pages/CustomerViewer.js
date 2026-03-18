@@ -470,12 +470,12 @@ const CustomerViewer = () => {
           variant="ghost"
           className={`${textColor} hover:bg-white/20 h-10 w-10 p-0 disabled:opacity-30 rounded-full`}
         >
-          <ChevronUp className="w-5 h-5" />
+          <ChevronLeft className="w-5 h-5" />
         </Button>
         
         {storybook.settings?.showPageNumbers && (
           <span className={`${textColor} font-sans text-[10px] px-1 text-center leading-tight my-1`}>
-            {currentSpread + 1}<br />{totalSpreads}
+            {currentSpread + 1}/{totalSpreads}
           </span>
         )}
         
@@ -486,7 +486,7 @@ const CustomerViewer = () => {
           variant="ghost"
           className={`${textColor} hover:bg-white/20 h-10 w-10 p-0 disabled:opacity-30 rounded-full`}
         >
-          <ChevronDown className="w-5 h-5" />
+          <ChevronRight className="w-5 h-5" />
         </Button>
 
         <div className={`w-6 h-px my-1 ${dividerColor}`} />
