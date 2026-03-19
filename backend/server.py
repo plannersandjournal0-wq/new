@@ -368,6 +368,20 @@ async def get_upload(filename: str):
     
     return FileResponse(file_path)
 
+@api_router.get("/download-backup")
+async def download_backup():
+    """Download the complete backup package"""
+    backup_path = Path("/app/storybook_vault_backup.zip")
+    
+    if not backup_path.exists():
+        raise HTTPException(status_code=404, detail="Backup file not found. Please create backup first.")
+    
+    return FileResponse(
+        backup_path, 
+        filename="storybook_vault_backup.zip",
+        media_type="application/zip"
+    )
+
 # Include the router in the main app
 app.include_router(api_router)
 
