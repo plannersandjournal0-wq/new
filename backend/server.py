@@ -836,6 +836,65 @@ async def test_pdf_fill(request: dict):
         raise HTTPException(status_code=500, detail=f"Test fill failed: {str(e)}")
 
 
+@api_router.post("/automation/test-email")
+async def test_email(request: dict):
+    """
+    Test endpoint to send a delivery email without triggering full automation.
+    For admin use only.
+    
+    Request:
+      {
+        "to_email": "test@example.com",
+        "customer_name": "Sarah",
+        "storybook_title": "Sarah's Luna Adventure",
+        "customer_view_url": "https://example.com/view/sarahs-story",
+        "password": "sarah123"  // optional
+      }
+    
+    Returns:
+      { "success": true/false, "message": "..." }
+    """
+    try:
+        to_email = request.get("to_email")
+        customer_name = request.get("customer_name", "Friend")
+        storybook_title = request.get("storybook_title", "Your Storybook")
+        customer_view_url = request.get("customer_view_url")
+        password = request.get("password")
+        
+        if not to_email or not customer_view_url:
+            raise HTTPException(
+                status_code=400,
+                detail="to_email and customer_view_url are required"
+            )
+        
+        from automation.email_sender import EmailSender
+        
+        success = await EmailSender.send_storybook_delivery_email(
+            to_email=to_email,
+            customer_name=customer_name,
+            storybook_title=storybook_title,
+            customer_view_url=customer_view_url,
+            password=password,
+            order_id="test-email"
+        )
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"Test email sent successfully to {to_email}"
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Email sending failed. Check backend logs for details."
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Test email failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Test email failed: {str(e)}")
+
 
 @api_router.post("/storybooks/upload")
 async def upload_storybook(

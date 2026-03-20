@@ -234,6 +234,60 @@ class OrderProcessor:
                 }
             }
         )
+        
+        # Send delivery email
+        try:
+            from automation.email_sender import EmailSender
+            
+            order = await self.db.automation_orders.find_one({"id": order_id})
+            customer_email = order["customerData"].get("customerEmail")
+            customer_name = order["customerData"].get("requestedName", "Friend")
+            password = order["customerData"].get("password")
+            
+            # Get the storybook title from the storybook record
+            storybook = await self.db.storybooks.find_one(
+                {"id": flipbook_data["storybookId"]},
+                {"title": 1}
+            )
+            storybook_title = storybook["title"] if storybook else f"{customer_name}'s Storybook"
+            
+            # Get base URL from environment or construct it
+            import os
+            base_url = os.getenv("REACT_APP_BACKEND_URL", "https://restore-point-4.preview.emergentagent.com")
+            # Remove /api if present and trailing slashes
+            base_url = base_url.rstrip('/').replace('/api', '')
+            full_view_url = f"{base_url}{flipbook_data['customerViewUrl']}"
+            
+            email_sent = await EmailSender.send_storybook_delivery_email(
+                to_email=customer_email,
+                customer_name=customer_name,
+                storybook_title=storybook_title,
+                customer_view_url=full_view_url,
+                password=password,
+                order_id=order_id
+            )
+            
+            # Update order with email status
+            await self.db.automation_orders.update_one(
+                {"id": order_id},
+                {
+                    "$set": {
+                        "emailSent": email_sent,
+                        "emailSentAt": datetime.now(timezone.utc).isoformat() if email_sent else None
+                    }
+                }
+            )
+            
+            await self.add_log(
+                order_id,
+                "completed",
+                f"Delivery email {'sent successfully' if email_sent else 'FAILED to send'} to {customer_email}"
+            )
+            
+        except Exception as e:
+            logger.error(f"Email delivery failed for order {order_id}: {str(e)}")
+            await self.add_log(order_id, "warning", f"Email delivery failed: {str(e)}")
+            # Do NOT fail the order if email fails — order is still completed
     
     async def _mark_failed(
         self,

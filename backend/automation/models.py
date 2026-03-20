@@ -153,6 +153,10 @@ class AutomationOrder(BaseModel):
     retryCount: int = 0
     lastRetryAt: Optional[str] = None
     
+    # Email delivery
+    emailSent: bool = False
+    emailSentAt: Optional[str] = None
+    
     # Timestamps
     createdAt: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     updatedAt: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")

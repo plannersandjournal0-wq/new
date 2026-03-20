@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Package, RefreshCw, ExternalLink, AlertCircle, CheckCircle, Clock, XCircle, TestTube } from 'lucide-react';
+import { Package, RefreshCw, ExternalLink, AlertCircle, CheckCircle, Clock, XCircle, TestTube, Mail, MailX } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
@@ -220,6 +220,19 @@ function OrderCard({ order, onViewDetails, onRetry, getStatusIcon, getStatusBadg
             <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusBadge(order.status)}`}>
               {order.status.toUpperCase()}
             </span>
+            
+            {/* Email Status Icon */}
+            {order.status === 'completed' && (
+              order.emailSent ? (
+                <span className="flex items-center gap-1 text-green-600" title="Email delivered">
+                  <Mail size={18} />
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-red-600" title="Email failed">
+                  <MailX size={18} />
+                </span>
+              )
+            )}
           </div>
 
           <div className="space-y-1 text-sm text-gray-600">
@@ -331,6 +344,34 @@ function OrderDetailsModal({ order, onClose, onRetry, getStatusBadge }) {
                     View Customer Storybook <ExternalLink size={14} />
                   </a>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Email Delivery Status */}
+          {order.status === 'completed' && (
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">Email Delivery</h3>
+              <div className={`rounded-lg p-4 space-y-2 text-sm ${
+                order.emailSent ? 'bg-green-50' : 'bg-red-50'
+              }`}>
+                <p className="flex items-center gap-2">
+                  {order.emailSent ? (
+                    <>
+                      <Mail className="text-green-600" size={18} />
+                      <strong className="text-green-900">Email Sent: Yes</strong>
+                    </>
+                  ) : (
+                    <>
+                      <MailX className="text-red-600" size={18} />
+                      <strong className="text-red-900">Email Sent: No (Failed)</strong>
+                    </>
+                  )}
+                </p>
+                {order.emailSentAt && (
+                  <p><strong>Sent At:</strong> {new Date(order.emailSentAt).toLocaleString()}</p>
+                )}
+                <p><strong>Sent To:</strong> {order.customerData?.customerEmail}</p>
               </div>
             </div>
           )}
