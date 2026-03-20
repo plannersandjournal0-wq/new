@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { api, getImageUrl } from '@/lib/api';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Volume2, VolumeX, Lock, Maximize2, Minimize2, Hash, X, RotateCcw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Volume2, VolumeX, Lock, Maximize2, Minimize2, Hash, X, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { playSound } from '@/lib/sounds';
@@ -525,7 +525,7 @@ const CustomerViewer = () => {
     );
   };
 
-  // Desktop navigation (unchanged)
+  // Desktop navigation - Fixed: Use Left/Right arrows, added GoTo button to all styles
   const getDesktopNavigation = () => {
     const navStyle = storybook.settings?.navLayout || 'AirBar';
     const totalSpreads = storybook.spreads.length;
@@ -536,13 +536,21 @@ const CustomerViewer = () => {
         return (
           <div className={`absolute bottom-0 left-0 right-0 flex items-center justify-center gap-4 ${bg} px-8 py-4 border-t border-white/10`}>
             <Button onClick={goToPrevious} disabled={currentSpread === 0} size="sm" variant="ghost" className={`${textColor} hover:bg-white/20 h-10 w-10 p-0`}>
-              <ChevronUp className="w-6 h-6" />
+              <ChevronLeft className="w-6 h-6" />
             </Button>
             {storybook.settings?.showPageNumbers && <span className={`${textColor} font-sans text-sm px-4`}>{currentSpread + 1}/{totalSpreads}</span>}
             <Button onClick={goToNext} disabled={currentSpread === totalSpreads - 1} size="sm" variant="ghost" className={`${textColor} hover:bg-white/20 h-10 w-10 p-0`}>
-              <ChevronDown className="w-6 h-6" />
+              <ChevronRight className="w-6 h-6" />
             </Button>
             <div className="mx-2 h-6 w-px bg-white/20" />
+            <Button
+              onClick={() => { setShowGoTo(!showGoTo); resetHideControlsTimer(); }}
+              size="sm"
+              variant="ghost"
+              className={`${textColor} hover:bg-white/20 h-10 w-10 p-0`}
+            >
+              <Hash className="w-5 h-5" />
+            </Button>
             <Button onClick={handleFullscreen} size="sm" variant="ghost" className={`${textColor} hover:bg-white/20 h-10 w-10 p-0`}>
               {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
             </Button>
@@ -557,31 +565,59 @@ const CustomerViewer = () => {
       case 'GhostEdges':
         return (
           <>
+            {/* Left arrow - positioned on left edge */}
             <Button onClick={goToPrevious} disabled={currentSpread === 0} size="sm" variant="ghost" className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white hover:bg-white/10 h-12 w-12 p-0">
-              <ChevronUp className="w-8 h-8" />
+              <ChevronLeft className="w-8 h-8" />
             </Button>
+            {/* Right arrow - positioned on right edge */}
             <Button onClick={goToNext} disabled={currentSpread === totalSpreads - 1} size="sm" variant="ghost" className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white hover:bg-white/10 h-12 w-12 p-0">
-              <ChevronDown className="w-8 h-8" />
+              <ChevronRight className="w-8 h-8" />
             </Button>
-            {storybook.settings?.showPageNumbers && (
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/40 backdrop-blur-sm px-3 py-1 rounded-full">
+            {/* Bottom center bar with page counter, GoTo, fullscreen, and sound */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/40 backdrop-blur-sm px-4 py-2 rounded-full flex items-center gap-3">
+              {storybook.settings?.showPageNumbers && (
                 <span className="text-white/90 font-sans text-xs">{currentSpread + 1}/{totalSpreads}</span>
-              </div>
-            )}
+              )}
+              <Button
+                onClick={() => { setShowGoTo(!showGoTo); resetHideControlsTimer(); }}
+                size="sm"
+                variant="ghost"
+                className="text-white/70 hover:text-white hover:bg-white/10 h-8 w-8 p-0"
+              >
+                <Hash className="w-4 h-4" />
+              </Button>
+              <Button onClick={handleFullscreen} size="sm" variant="ghost" className="text-white/70 hover:text-white hover:bg-white/10 h-8 w-8 p-0">
+                {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              </Button>
+              {storybook.settings?.soundEnabled && (
+                <Button onClick={() => setSoundOn(!soundOn)} size="sm" variant="ghost" className="text-white/70 hover:text-white hover:bg-white/10 h-8 w-8 p-0">
+                  {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                </Button>
+              )}
+            </div>
           </>
         );
 
       default:
+        // AirBar (default)
         return (
           <div className={`absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2 ${bg} px-4 py-3 rounded-full border border-white/10 shadow-2xl`}>
             <Button onClick={goToPrevious} disabled={currentSpread === 0} size="sm" variant="ghost" className={`${textColor} hover:bg-white/20 h-9 w-9 p-0`}>
-              <ChevronUp className="w-6 h-6" />
+              <ChevronLeft className="w-6 h-6" />
             </Button>
             {storybook.settings?.showPageNumbers && <span className={`${textColor} font-sans text-sm px-4`}>{currentSpread + 1}/{totalSpreads}</span>}
             <Button onClick={goToNext} disabled={currentSpread === totalSpreads - 1} size="sm" variant="ghost" className={`${textColor} hover:bg-white/20 h-9 w-9 p-0`}>
-              <ChevronDown className="w-6 h-6" />
+              <ChevronRight className="w-6 h-6" />
             </Button>
             <div className="mx-2 h-6 w-px bg-white/20" />
+            <Button
+              onClick={() => { setShowGoTo(!showGoTo); resetHideControlsTimer(); }}
+              size="sm"
+              variant="ghost"
+              className={`${textColor} hover:bg-white/20 h-9 w-9 p-0`}
+            >
+              <Hash className="w-4 h-4" />
+            </Button>
             <Button onClick={handleFullscreen} size="sm" variant="ghost" className={`${textColor} hover:bg-white/20 h-9 w-9 p-0`}>
               {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
             </Button>

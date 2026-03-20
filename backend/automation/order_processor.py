@@ -240,7 +240,16 @@ class OrderProcessor:
             from automation.email_sender import EmailSender
             
             order = await self.db.automation_orders.find_one({"id": order_id})
-            customer_email = order["customerData"].get("customerEmail")
+            customer_email = (
+                order["customerData"].get("customerEmail") or
+                order["customerData"].get("buyerEmail") or
+                order["customerData"].get("email")
+            )
+            
+            if not customer_email:
+                logger.warning(f"No customer email found for order {order_id} — skipping email")
+                return
+            
             customer_name = order["customerData"].get("requestedName", "Friend")
             password = order["customerData"].get("password")
             
@@ -251,11 +260,10 @@ class OrderProcessor:
             )
             storybook_title = storybook["title"] if storybook else f"{customer_name}'s Storybook"
             
-            # Get base URL from environment or construct it
+            # Get base URL from environment
             import os
-            base_url = os.getenv("REACT_APP_BACKEND_URL", "https://restore-point-4.preview.emergentagent.com")
-            # Remove /api if present and trailing slashes
-            base_url = base_url.rstrip('/').replace('/api', '')
+            base_url = os.getenv("APP_BASE_URL", "http://localhost:3000")
+            base_url = base_url.rstrip('/')
             full_view_url = f"{base_url}{flipbook_data['customerViewUrl']}"
             
             email_sent = await EmailSender.send_storybook_delivery_email(
@@ -288,6 +296,21 @@ class OrderProcessor:
             logger.error(f"Email delivery failed for order {order_id}: {str(e)}")
             await self.add_log(order_id, "warning", f"Email delivery failed: {str(e)}")
             # Do NOT fail the order if email fails — order is still completed
+        
+        # Cleanup: Delete the personalized PDF to save storage
+        try:
+            import os as _os
+            order = await self.db.automation_orders.find_one({"id": order_id})
+            pdf_path = order.get("personalizedPdfPath")
+            if pdf_path and _os.path.exists(pdf_path) and pdf_path != "deleted_after_use":
+                _os.remove(pdf_path)
+                await self.db.automation_orders.update_one(
+                    {"id": order_id},
+                    {"$set": {"personalizedPdfPath": "deleted_after_use"}}
+                )
+                logger.info(f"Deleted personalized PDF to save storage: {pdf_path}")
+        except Exception as e:
+            logger.warning(f"Could not delete personalized PDF for order {order_id}: {str(e)}")
     
     async def _mark_failed(
         self,

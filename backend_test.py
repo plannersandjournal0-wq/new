@@ -7,7 +7,7 @@ from pathlib import Path
 import io
 
 # Get backend URL from frontend env
-BACKEND_URL = "https://narrative-canvas-5.preview.emergentagent.com/api"
+BACKEND_URL = "https://storybook-vault-2.preview.emergentagent.com/api"
 ADMIN_PASSWORD = "Pankaj021"
 
 class StorybookVaultTester:

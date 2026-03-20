@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Form, Depends
+from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Form, Depends, Request, BackgroundTasks
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -244,7 +244,8 @@ async def convert_pdf_to_storybook(
         
         # Copy PDF to uploads directory (for consistency with existing system)
         uploaded_pdf_path = UPLOAD_DIR / f"{storybook_id}.pdf"
-        shutil.copy(pdf_path, uploaded_pdf_path)
+        # Note: We no longer copy the PDF here - the spreads are generated directly
+        # and the original personalized PDF will be cleaned up after use
         
         # Create storybook record
         storybook_data = {
@@ -675,6 +676,93 @@ async def simulate_webhook(request: WebhookSimulateRequest):
             status_code=500,
             detail=f"Webhook simulation failed: {str(e)}"
         )
+
+
+async def process_creem_order_background(order_id: str):
+    """Background task to process a Creem order after acknowledging webhook"""
+    try:
+        await order_processor.process_order(order_id, convert_pdf_to_storybook)
+        logger.info(f"Background order processing completed: {order_id}")
+    except Exception as e:
+        logger.error(f"Background order processing failed for {order_id}: {str(e)}")
+
+
+@api_router.post("/webhooks/creem")
+async def creem_webhook(request: Request, background_tasks: BackgroundTasks):
+    """
+    Production webhook endpoint for Creem payment notifications.
+    
+    1. Reads raw body bytes BEFORE JSON parsing
+    2. Verifies creem-signature header using HMAC-SHA256
+    3. Returns 200 immediately (don't make Creem wait for full processing)
+    4. Processes order async in background
+    """
+    try:
+        # Read raw body bytes FIRST (before any JSON parsing)
+        raw_body = await request.body()
+        
+        # Get signature header
+        signature = request.headers.get("creem-signature", "")
+        
+        # Get webhook secret from environment
+        webhook_secret = os.getenv("CREEM_WEBHOOK_SECRET", "")
+        
+        if not webhook_secret or webhook_secret == "placeholder":
+            logger.warning("CREEM_WEBHOOK_SECRET not configured - skipping signature verification")
+        else:
+            # Verify signature
+            is_valid = await webhook_handler.verify_creem_signature(
+                raw_body=raw_body,
+                signature=signature,
+                webhook_secret=webhook_secret
+            )
+            
+            if not is_valid:
+                logger.warning(f"Invalid Creem webhook signature")
+                raise HTTPException(status_code=403, detail="Invalid signature")
+        
+        # Parse JSON payload
+        try:
+            webhook_data = await request.json()
+        except Exception:
+            # If body was already consumed, decode from raw_body
+            import json
+            webhook_data = json.loads(raw_body.decode("utf-8"))
+        
+        logger.info(f"Received Creem webhook: {webhook_data.get('orderId', 'unknown')}")
+        
+        # Handle webhook (creates order with idempotency)
+        result = await webhook_handler.handle_webhook(webhook_data, is_simulated=False)
+        
+        if result.get("isExisting"):
+            # Order already exists - just acknowledge
+            return {
+                "received": True,
+                "message": "Order already processed",
+                "orderId": result["orderId"]
+            }
+        
+        # Schedule background processing and return 200 immediately
+        order_id = result["orderId"]
+        background_tasks.add_task(process_creem_order_background, order_id)
+        
+        return {
+            "received": True,
+            "message": "Webhook received, processing in background",
+            "orderId": order_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Creem webhook error: {str(e)}")
+        # Return 200 anyway to prevent Creem from retrying
+        # Log the error for investigation
+        return {
+            "received": True,
+            "error": str(e),
+            "message": "Webhook received but processing may have failed"
+        }
 
 
 @api_router.get("/automation/orders", response_model=OrderListResponse)

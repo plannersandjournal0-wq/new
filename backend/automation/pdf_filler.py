@@ -136,10 +136,10 @@ class PDFFiller:
 
                                     # Write new appearance stream back
                                     doc.update_stream(ap_xref, new_stream.encode("latin-1"))
-
-                                    # Also set the field value for form readers
-                                    widget.field_value = fill_value
-                                    widget.update()
+                                    
+                                    # Set the field value in PDF structure (for form readers)
+                                    # DO NOT call widget.update() here - it would regenerate appearance stream
+                                    doc.xref_set_key(xref, "V", fitz.get_pdf_str(fill_value))
 
                                     filled = True
                                     logger.info(

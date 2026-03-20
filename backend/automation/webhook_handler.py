@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from typing import Dict, Optional
 import logging
 import uuid
+import hmac
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -144,20 +146,30 @@ class WebhookHandler:
         
         return order
     
-    async def verify_creem_signature(self, payload: Dict, signature: str) -> bool:
+    async def verify_creem_signature(
+        self,
+        raw_body: bytes,
+        signature: str,
+        webhook_secret: str
+    ) -> bool:
         """
-        Verify Creem webhook signature.
+        Verify Creem webhook signature using HMAC-SHA256.
         
         Args:
-            payload: The webhook payload
-            signature: The creem-signature header
+            raw_body: The raw request body bytes (before JSON parsing)
+            signature: The creem-signature header value
+            webhook_secret: The webhook secret from environment
             
         Returns:
             True if signature is valid
-            
-        Note: Implementation depends on Creem's signature algorithm
         """
-        # TODO: Implement actual Creem signature verification
-        # For now, return True for development
-        logger.warning("Creem signature verification not yet implemented")
-        return True
+        try:
+            expected = hmac.new(
+                webhook_secret.encode("utf-8"),
+                raw_body,
+                hashlib.sha256
+            ).hexdigest()
+            return hmac.compare_digest(expected, signature)
+        except Exception as e:
+            logger.error(f"Signature verification error: {str(e)}")
+            return False
