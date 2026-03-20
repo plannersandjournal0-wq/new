@@ -210,6 +210,86 @@ async def convert_pdf_to_spreads(pdf_path: str, storybook_id: str) -> tuple:
         logger.error(f"Error converting PDF: {e}")
         raise HTTPException(status_code=500, detail=f"PDF conversion failed: {str(e)}")
 
+
+# ============================================================================
+# AUTOMATION: Internal Flipbook Conversion Function
+# ============================================================================
+
+async def convert_pdf_to_storybook(
+    pdf_path: str,
+    title: str,
+    customer_name: str,
+    password: Optional[str] = None
+) -> dict:
+    """
+    Internal function to convert a personalized PDF into a storybook.
+    Reuses existing flipbook generation logic.
+    
+    Args:
+        pdf_path: Path to the personalized PDF
+        title: Title for the storybook
+        customer_name: Customer's requested name
+        password: Optional password for protection
+        
+    Returns:
+        Dict with storybookId, slug, customerViewUrl
+    """
+    try:
+        # Create storybook ID
+        storybook_id = str(uuid.uuid4())
+        slug = title.lower().replace(" ", "-").replace("'", "") + "-" + storybook_id[:8]
+        
+        # Convert PDF to spreads (reuse existing function)
+        spreads, cover_url, orientation, spread_count = await convert_pdf_to_spreads(pdf_path, storybook_id)
+        
+        # Copy PDF to uploads directory (for consistency with existing system)
+        uploaded_pdf_path = UPLOAD_DIR / f"{storybook_id}.pdf"
+        shutil.copy(pdf_path, uploaded_pdf_path)
+        
+        # Create storybook record
+        storybook_data = {
+            "id": storybook_id,
+            "title": title,
+            "slug": slug,
+            "subtitle": f"Personalized for {customer_name}",
+            "pdfUrl": f"/api/uploads/{storybook_id}.pdf",
+            "coverImageUrl": cover_url,
+            "spreads": spreads,
+            "orientation": orientation,
+            "spreadCount": spread_count,
+            "status": "ready",
+            "customerLink": f"/view/{slug}",
+            "embedCode": f'<iframe src="/view/{slug}" width="100%" height="600px" frameborder="0"></iframe>',
+            "passwordProtected": False,
+            "passwordHash": "",
+            "expiresAt": None,
+            "viewCount": 0,
+            "settings": StorybookSettings().model_dump(),
+            "createdAt": datetime.now(timezone.utc).isoformat(),
+            "updatedAt": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Apply password protection if provided
+        if password:
+            storybook_data["passwordProtected"] = True
+            storybook_data["passwordHash"] = hash_password(password)
+        
+        # Save to database
+        await db.storybooks.insert_one(storybook_data)
+        
+        logger.info(f"Storybook created from automation: {storybook_id} (slug: {slug})")
+        
+        return {
+            "storybookId": storybook_id,
+            "slug": slug,
+            "customerViewUrl": f"/view/{slug}"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error converting PDF to storybook: {str(e)}")
+        raise Exception(f"Failed to create storybook: {str(e)}")
+
+
 # Routes
 @api_router.get("/")
 async def root():
@@ -505,6 +585,185 @@ async def get_template_pdf(template_id: str):
         raise HTTPException(status_code=404, detail="Template PDF not found")
     
     return FileResponse(pdf_path, media_type="application/pdf")
+
+
+
+# ============================================================================
+# AUTOMATION: WEBHOOK & ORDER PROCESSING ENDPOINTS (Phase 1C)
+# ============================================================================
+
+# Import automation modules
+from automation.webhook_handler import WebhookHandler
+from automation.order_processor import OrderProcessor
+from automation.models import (
+    AutomationOrder, WebhookSimulateRequest, OrderListResponse,
+    ProcessingLogEntry
+)
+
+# Initialize automation handlers
+webhook_handler = WebhookHandler(db)
+order_processor = OrderProcessor(db, TEMPLATES_DIR, PERSONALIZED_DIR)
+
+
+@api_router.post("/automation/simulate-webhook")
+async def simulate_webhook(request: WebhookSimulateRequest):
+    """
+    Simulate a webhook for testing without real payments.
+    """
+    try:
+        # Prepare webhook data
+        webhook_data = {
+            "orderId": request.orderId or f"sim-{str(uuid.uuid4())[:8]}",
+            "eventId": f"evt-sim-{str(uuid.uuid4())[:8]}",
+            "productSlug": request.productSlug,
+            "requestedName": request.requestedName,
+            "buyerFullName": request.buyerFullName or request.requestedName,
+            "customerEmail": request.customerEmail,
+            "password": request.password
+        }
+        
+        # Handle webhook (creates order with idempotency)
+        result = await webhook_handler.handle_webhook(webhook_data, is_simulated=True)
+        
+        if result.get("isExisting"):
+            # Return existing order
+            order = await db.automation_orders.find_one(
+                {"id": result["orderId"]},
+                {"_id": 0}
+            )
+            return {
+                "success": True,
+                "message": result["message"],
+                "orderId": result["orderId"],
+                "order": order
+            }
+        
+        # Process the new order
+        order_id = result["orderId"]
+        
+        try:
+            # Run full automation pipeline
+            completed_order = await order_processor.process_order(
+                order_id,
+                convert_pdf_to_storybook
+            )
+            
+            return {
+                "success": True,
+                "message": "Simulated webhook processed successfully",
+                "orderId": order_id,
+                "order": completed_order
+            }
+            
+        except Exception as process_error:
+            # Order failed but was created - return with error
+            failed_order = await db.automation_orders.find_one(
+                {"id": order_id},
+                {"_id": 0}
+            )
+            
+            return {
+                "success": False,
+                "message": f"Order processing failed: {str(process_error)}",
+                "orderId": order_id,
+                "order": failed_order
+            }
+        
+    except Exception as e:
+        logger.error(f"Simulate webhook failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Webhook simulation failed: {str(e)}"
+        )
+
+
+@api_router.get("/automation/orders", response_model=OrderListResponse)
+async def get_orders(
+    status: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0
+):
+    """Get all automation orders with optional status filter"""
+    try:
+        query = {}
+        if status and status != "all":
+            valid_statuses = ["received", "verified", "processing", "completed", "failed", "cancelled"]
+            if status not in valid_statuses:
+                raise HTTPException(status_code=400, detail="Invalid status value")
+            query["status"] = status
+        
+        # Get total count
+        total = await db.automation_orders.count_documents(query)
+        
+        # Get orders with pagination
+        orders = await db.automation_orders.find(query, {"_id": 0}) \
+            .sort("createdAt", -1) \
+            .skip(offset) \
+            .limit(limit) \
+            .to_list(limit)
+        
+        return OrderListResponse(
+            orders=orders,
+            total=total,
+            limit=limit,
+            offset=offset
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching orders: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch orders")
+
+
+@api_router.get("/automation/orders/{order_id}", response_model=AutomationOrder)
+async def get_order(order_id: str):
+    """Get single order by ID"""
+    try:
+        order = await db.automation_orders.find_one({"id": order_id}, {"_id": 0})
+        
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        return order
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching order: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch order")
+
+
+@api_router.post("/automation/orders/{order_id}/retry")
+async def retry_order(order_id: str):
+    """Retry a failed order"""
+    try:
+        # Use order processor to retry
+        result = await order_processor.retry_order(order_id, convert_pdf_to_storybook)
+        
+        return {
+            "message": "Order retry completed",
+            "orderId": order_id,
+            "order": result
+        }
+        
+    except Exception as e:
+        logger.error(f"Order retry failed: {str(e)}")
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+
+@api_router.get("/personalized/{filename}")
+async def get_personalized_pdf(filename: str):
+    """Get personalized PDF file"""
+    file_path = PERSONALIZED_DIR / filename
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Personalized PDF not found")
+    
+    return FileResponse(file_path, media_type="application/pdf")
 
 
 
