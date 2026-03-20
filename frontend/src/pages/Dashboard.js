@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, getImageUrl } from '@/lib/api';
 import { toast } from 'sonner';
@@ -30,15 +30,7 @@ const Dashboard = ({ embedded = false }) => {
   const navigate = useNavigate();
   const { logout } = useAuth();
 
-  useEffect(() => {
-    loadStorybooks();
-  }, []);
-
-  useEffect(() => {
-    filterStorybooks();
-  }, [storybooks, searchQuery, statusFilter]);
-
-  const loadStorybooks = async () => {
+  const loadStorybooks = useCallback(async () => {
     try {
       const data = await api.getStorybooks();
       setStorybooks(data);
@@ -47,9 +39,9 @@ const Dashboard = ({ embedded = false }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const filterStorybooks = () => {
+  const filterStorybooks = useCallback(() => {
     let filtered = storybooks;
 
     if (statusFilter !== 'all') {
@@ -64,7 +56,15 @@ const Dashboard = ({ embedded = false }) => {
     }
 
     setFilteredStorybooks(filtered);
-  };
+  }, [storybooks, searchQuery, statusFilter]);
+
+  useEffect(() => {
+    loadStorybooks();
+  }, [loadStorybooks]);
+
+  useEffect(() => {
+    filterStorybooks();
+  }, [filterStorybooks]);
 
   const handleUpload = async () => {
     if (!uploadFile || !uploadTitle) {

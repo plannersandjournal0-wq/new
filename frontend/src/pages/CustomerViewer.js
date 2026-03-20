@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { api, getImageUrl } from '@/lib/api';
 import { toast } from 'sonner';
@@ -38,6 +38,27 @@ const CustomerViewer = () => {
   const loadingImages = useRef(new Set());
   const goToRef = useRef(null);
 
+  const loadStorybook = useCallback(async () => {
+    try {
+      const data = await api.getStorybookBySlug(slug);
+      setStorybook(data);
+      
+      if (data.passwordProtected) {
+        setRequiresPassword(true);
+      } else {
+        setAuthenticated(true);
+      }
+
+      if (data.settings?.soundEnabled !== undefined) {
+        setSoundOn(data.settings.soundEnabled);
+      }
+    } catch (error) {
+      toast.error('Storybook not found');
+    } finally {
+      setLoading(false);
+    }
+  }, [slug]);
+
   // Load storybook and handle resize
   useEffect(() => {
     loadStorybook();
@@ -51,7 +72,7 @@ const CustomerViewer = () => {
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [slug]);
+  }, [loadStorybook]);
 
   // Auto-hide controls after 14 seconds
   useEffect(() => {
@@ -173,27 +194,6 @@ const CustomerViewer = () => {
 
   const handleUserActivity = () => {
     resetHideControlsTimer();
-  };
-
-  const loadStorybook = async () => {
-    try {
-      const data = await api.getStorybookBySlug(slug);
-      setStorybook(data);
-      
-      if (data.passwordProtected) {
-        setRequiresPassword(true);
-      } else {
-        setAuthenticated(true);
-      }
-
-      if (data.settings?.soundEnabled !== undefined) {
-        setSoundOn(data.settings.soundEnabled);
-      }
-    } catch (error) {
-      toast.error('Storybook not found');
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handlePasswordSubmit = async () => {

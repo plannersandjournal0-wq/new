@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
@@ -19,18 +19,7 @@ const PreviewStudio = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  useEffect(() => {
-    loadStorybook();
-    
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [storybookId]);
-
-  const loadStorybook = async () => {
+  const loadStorybook = useCallback(async () => {
     try {
       const data = await api.getStorybook(storybookId);
       setStorybook(data);
@@ -41,7 +30,18 @@ const PreviewStudio = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [storybookId, navigate]);
+
+  useEffect(() => {
+    loadStorybook();
+    
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [loadStorybook]);
 
   const handleSave = async (newStatus = null) => {
     setSaving(true);

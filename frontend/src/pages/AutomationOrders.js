@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Package, RefreshCw, ExternalLink, AlertCircle, CheckCircle, Clock, XCircle, TestTube, Mail, MailX } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -13,11 +13,7 @@ function AutomationOrders({ standalone = true }) {
   const [showSimulator, setShowSimulator] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
 
-  useEffect(() => {
-    fetchOrders();
-  }, [statusFilter]);
-
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       const url = statusFilter === 'all' 
         ? `${API_URL}/api/automation/orders`
@@ -31,7 +27,11 @@ function AutomationOrders({ standalone = true }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
+
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
 
   const retryOrder = async (orderId) => {
     try {
