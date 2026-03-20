@@ -767,6 +767,76 @@ async def get_personalized_pdf(filename: str):
 
 
 
+@api_router.post("/automation/test-pdf-fill")
+async def test_pdf_fill(request: dict):
+    """
+    Test endpoint to fill a template PDF with a test name and download result.
+    For admin use only - verify font preservation before running full automation.
+    
+    Request:
+      {
+        "templateId": "template-uuid",
+        "testName": "Sarah"
+      }
+    
+    Returns:
+      The filled PDF file as download
+    """
+    try:
+        template_id = request.get("templateId")
+        test_name = request.get("testName", "TestName")
+        
+        if not template_id:
+            raise HTTPException(status_code=400, detail="templateId is required")
+        
+        # Get template
+        template = await db.templates.find_one({"id": template_id}, {"_id": 0})
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+        
+        # Prepare test customer data
+        customer_data = {
+            "requestedName": test_name,
+            "buyerFullName": test_name,
+            "customerEmail": "test@example.com"
+        }
+        
+        # Generate temporary output path
+        import tempfile
+        temp_output = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        output_path = temp_output.name
+        temp_output.close()
+        
+        # Fill the PDF
+        from automation.pdf_filler import PDFFiller
+        pdf_filler = PDFFiller()
+        
+        await pdf_filler.fill_pdf_fields(
+            template_path=template["basePdfPath"],
+            field_mappings=template.get("fieldMappings", []),
+            customer_data=customer_data,
+            output_path=output_path
+        )
+        
+        logger.info(f"Test PDF fill completed: {output_path}")
+        
+        # Return the filled PDF as download
+        from fastapi.responses import FileResponse
+        return FileResponse(
+            output_path,
+            media_type="application/pdf",
+            filename=f"test-fill-{test_name}.pdf",
+            headers={"Content-Disposition": f'attachment; filename="test-fill-{test_name}.pdf"'}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Test PDF fill failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Test fill failed: {str(e)}")
+
+
+
 @api_router.post("/storybooks/upload")
 async def upload_storybook(
     file: UploadFile = File(...),

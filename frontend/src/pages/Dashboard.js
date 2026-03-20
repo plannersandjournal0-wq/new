@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
-const Dashboard = () => {
+const Dashboard = ({ embedded = false }) => {
   const [storybooks, setStorybooks] = useState([]);
   const [filteredStorybooks, setFilteredStorybooks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -155,31 +155,33 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-2">
-            <Button
-              onClick={() => navigate('/admin/templates')}
-              variant="ghost"
-              className="text-magical-plum hover:text-magical-ink"
-            >
-              Templates
-            </Button>
-            <Button
-              onClick={() => navigate('/admin/orders')}
-              variant="ghost"
-              className="text-magical-plum hover:text-magical-ink"
-            >
-              Orders
-            </Button>
-            <Button
-              onClick={() => logout()}
-              variant="ghost"
-              className="text-magical-plum hover:text-magical-ink"
-              data-testid="logout-button"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Logout
-            </Button>
-          </div>
+          {!embedded && (
+            <div className="hidden md:flex items-center gap-2">
+              <Button
+                onClick={() => navigate('/admin/templates')}
+                variant="ghost"
+                className="text-magical-plum hover:text-magical-ink"
+              >
+                Templates
+              </Button>
+              <Button
+                onClick={() => navigate('/admin/orders')}
+                variant="ghost"
+                className="text-magical-plum hover:text-magical-ink"
+              >
+                Orders
+              </Button>
+              <Button
+                onClick={() => logout()}
+                variant="ghost"
+                className="text-magical-plum hover:text-magical-ink"
+                data-testid="logout-button"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Logout
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Mobile search bar */}

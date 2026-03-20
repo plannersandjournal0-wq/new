@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
-function AutomationOrders() {
+function AutomationOrders({ standalone = true }) {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -88,27 +88,45 @@ function AutomationOrders() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      {/* Header - only show if standalone */}
+      {standalone && (
+        <div className="bg-white border-b border-gray-200 shadow-sm">
+          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate('/admin/dashboard')}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                ← Back
+              </button>
+              <h1 className="text-2xl font-bold text-gray-900">Automation Orders</h1>
+            </div>
             <button
-              onClick={() => navigate('/admin/dashboard')}
-              className="text-gray-600 hover:text-gray-900"
+              onClick={() => setShowSimulator(true)}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
             >
-              ← Back
+              <TestTube size={20} />
+              Test Webhook
             </button>
-            <h1 className="text-2xl font-bold text-gray-900">Automation Orders</h1>
           </div>
-          <button
-            onClick={() => setShowSimulator(true)}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
-          >
-            <TestTube size={20} />
-            Test Webhook
-          </button>
         </div>
-      </div>
+      )}
+
+      {/* Header for embedded mode */}
+      {!standalone && (
+        <div className="bg-white border-b border-gray-200 shadow-sm">
+          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <h1 className="text-2xl font-bold text-gray-900">Automation Orders</h1>
+            <button
+              onClick={() => setShowSimulator(true)}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+            >
+              <TestTube size={20} />
+              Test Webhook
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="max-w-7xl mx-auto px-6 py-4">

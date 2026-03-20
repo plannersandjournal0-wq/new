@@ -17,6 +17,7 @@ class PDFFiller:
     ) -> str:
         """
         Fill PDF form fields based on field mappings and customer data.
+        Preserves original font appearance.
         
         Args:
             template_path: Path to the base template PDF
@@ -57,7 +58,7 @@ class PDFFiller:
                     logger.warning(f"No value found for field '{pdf_field_name}' with variable '{variable_type}'")
                     continue
                 
-                # Fill the field across all pages
+                # Fill the field across all pages WITH FONT PRESERVATION
                 filled = False
                 for page_num in range(len(doc)):
                     page = doc[page_num]
@@ -66,10 +67,29 @@ class PDFFiller:
                     if widgets:
                         for widget in widgets:
                             if widget.field_name == pdf_field_name:
+                                # Step 1: Save original appearance (font, size, color)
+                                original_font = widget.text_font
+                                original_size = widget.text_fontsize
+                                original_color = widget.text_color
+                                
+                                # Step 2: Set the fill value
                                 widget.field_value = fill_value
                                 widget.update()
+                                
+                                # Step 3: Restore original appearance after filling
+                                if original_font:
+                                    widget.text_font = original_font
+                                if original_size:
+                                    widget.text_fontsize = original_size
+                                if original_color:
+                                    widget.text_color = original_color
+                                widget.update()
+                                
                                 filled = True
-                                logger.info(f"Filled field '{pdf_field_name}' on page {page_num + 1} with '{fill_value}'")
+                                logger.info(
+                                    f"Filled '{pdf_field_name}' on page {page_num + 1} "
+                                    f"with font preserved (font='{original_font}', size={original_size})"
+                                )
                 
                 if filled:
                     filled_fields.append({
@@ -79,8 +99,8 @@ class PDFFiller:
                 else:
                     logger.warning(f"Field '{pdf_field_name}' not found in PDF")
             
-            # Save the filled PDF
-            doc.save(output_path)
+            # Save with full rendering (not incremental) to ensure appearance streams are written
+            doc.save(output_path, incremental=False, encryption=fitz.PDF_ENCRYPT_NONE)
             doc.close()
             
             logger.info(f"PDF filling complete. Filled {len(filled_fields)} field(s)")
