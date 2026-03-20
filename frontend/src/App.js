@@ -5,6 +5,7 @@ import AdminLogin from '@/pages/AdminLogin';
 import AdminPanel from '@/pages/AdminPanel';
 import PreviewStudio from '@/pages/PreviewStudio';
 import CustomerViewer from '@/pages/CustomerViewer';
+import DiagnosticPage from '@/pages/DiagnosticPage';
 import { AuthProvider } from '@/context/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
@@ -26,6 +27,7 @@ function App() {
             </ProtectedRoute>
           } />
           <Route path="/view/:slug" element={<CustomerViewer />} />
+          <Route path="/debug" element={<DiagnosticPage />} />
         </Routes>
         <Toaster position="top-right" />
       </BrowserRouter>
