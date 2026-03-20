@@ -18,6 +18,10 @@ import jwt
 import json
 import shutil
 
+# Import automation modules
+from automation.models import Template, TemplateCreate, TemplateUpdate, TemplateListResponse, FieldMapping
+from automation.template_manager import TemplateManager
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
@@ -39,8 +43,12 @@ ADMIN_PASSWORD = "Pankaj021"
 # Upload directories
 UPLOAD_DIR = ROOT_DIR / "uploads"
 SPREADS_DIR = ROOT_DIR / "spreads"
+TEMPLATES_DIR = ROOT_DIR / "templates"
+PERSONALIZED_DIR = ROOT_DIR / "personalized"
 UPLOAD_DIR.mkdir(exist_ok=True)
 SPREADS_DIR.mkdir(exist_ok=True)
+TEMPLATES_DIR.mkdir(exist_ok=True)
+PERSONALIZED_DIR.mkdir(exist_ok=True)
 
 # Configure logging
 logging.basicConfig(
@@ -214,6 +222,291 @@ async def admin_login(login: AdminLogin):
     
     token = create_token({"role": "admin"})
     return AdminLoginResponse(token=token, message="Login successful")
+
+# ============================================================================
+# TEMPLATE MANAGEMENT ENDPOINTS (Phase 1A)
+# ============================================================================
+
+@api_router.post("/templates/upload", response_model=Template)
+async def upload_template(
+    file: UploadFile = File(...),
+    title: str = Form(...),
+    productSlug: str = Form(...),
+    description: str = Form("")
+):
+    """Upload a new fillable PDF template"""
+    try:
+        # Validate PDF file
+        if not file.filename.endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+        
+        # Create template ID
+        template_id = str(uuid.uuid4())
+        
+        # Save PDF file
+        pdf_path = TEMPLATES_DIR / f"{template_id}.pdf"
+        with open(pdf_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        logger.info(f"Saved template PDF: {pdf_path}")
+        
+        # Detect fillable fields
+        fillable_fields = await TemplateManager.detect_fillable_fields(str(pdf_path))
+        
+        if not fillable_fields:
+            # Clean up
+            pdf_path.unlink()
+            raise HTTPException(
+                status_code=400,
+                detail="No fillable fields detected in PDF. Please upload a fillable PDF template."
+            )
+        
+        # Get PDF info
+        pdf_info = await TemplateManager.get_pdf_info(str(pdf_path))
+        
+        # Generate thumbnail
+        thumbnail_path = TEMPLATES_DIR / f"{template_id}_thumbnail.webp"
+        await TemplateManager.generate_thumbnail(str(pdf_path), str(thumbnail_path))
+        
+        # Create template record
+        template = Template(
+            id=template_id,
+            title=title,
+            productSlug=productSlug,
+            description=description,
+            basePdfPath=str(pdf_path),
+            basePdfUrl=f"/api/templates/{template_id}.pdf",
+            fillableFields=fillable_fields,
+            fieldMappings=[],
+            status="draft",
+            orientation=pdf_info["orientation"],
+            pageCount=pdf_info["pageCount"],
+            thumbnailUrl=f"/api/templates/{template_id}/thumbnail.webp"
+        )
+        
+        # Save to database
+        template_dict = template.model_dump()
+        await db.templates.insert_one(template_dict)
+        
+        logger.info(f"Template created successfully: {template_id}")
+        return template
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Template upload failed: {str(e)}")
+        # Clean up on error
+        if pdf_path.exists():
+            pdf_path.unlink()
+        if thumbnail_path.exists():
+            thumbnail_path.unlink()
+        raise HTTPException(status_code=500, detail=f"Template upload failed: {str(e)}")
+
+
+@api_router.get("/templates", response_model=TemplateListResponse)
+async def get_templates(status: Optional[str] = None):
+    """Get all templates with optional status filter"""
+    try:
+        query = {}
+        if status and status != "all":
+            if status not in ["draft", "active", "inactive", "archived"]:
+                raise HTTPException(status_code=400, detail="Invalid status value")
+            query["status"] = status
+        
+        templates = await db.templates.find(query, {"_id": 0}).sort("createdAt", -1).to_list(1000)
+        
+        return TemplateListResponse(
+            templates=templates,
+            total=len(templates)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching templates: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch templates")
+
+
+@api_router.get("/templates/{template_id}", response_model=Template)
+async def get_template(template_id: str):
+    """Get single template by ID"""
+    try:
+        template = await db.templates.find_one({"id": template_id}, {"_id": 0})
+        
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+        
+        return template
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching template: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch template")
+
+
+@api_router.put("/templates/{template_id}", response_model=Template)
+async def update_template(template_id: str, update: TemplateUpdate):
+    """Update template configuration"""
+    try:
+        # Get existing template
+        template = await db.templates.find_one({"id": template_id}, {"_id": 0})
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+        
+        update_data = {}
+        
+        # Handle title update
+        if update.title is not None:
+            update_data["title"] = update.title
+        
+        # Handle description update
+        if update.description is not None:
+            update_data["description"] = update.description
+        
+        # Handle field mappings update
+        if update.fieldMappings is not None:
+            # Validate field mappings
+            fillable_fields = template.get("fillableFields", [])
+            field_mappings = [m.model_dump() for m in update.fieldMappings]
+            
+            is_valid, error_msg = await TemplateManager.validate_field_mappings(
+                fillable_fields,
+                field_mappings
+            )
+            
+            if not is_valid:
+                raise HTTPException(status_code=400, detail=error_msg)
+            
+            update_data["fieldMappings"] = field_mappings
+        
+        # Handle status update (includes one-active-per-productSlug rule)
+        if update.status is not None:
+            if update.status not in ["draft", "active", "inactive", "archived"]:
+                raise HTTPException(status_code=400, detail="Invalid status value")
+            
+            current_status = template.get("status")
+            new_status = update.status
+            
+            # If activating a template
+            if new_status == "active" and current_status != "active":
+                # Check if another template is already active for this productSlug
+                product_slug = template["productSlug"]
+                existing_active = await db.templates.find_one({
+                    "productSlug": product_slug,
+                    "status": "active",
+                    "id": {"$ne": template_id}
+                })
+                
+                if existing_active:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Template '{existing_active['title']}' is already active for product '{product_slug}'. Please deactivate it first."
+                    )
+                
+                update_data["status"] = "active"
+                update_data["activatedAt"] = datetime.now(timezone.utc).isoformat()
+            
+            # If deactivating from active
+            elif current_status == "active" and new_status == "inactive":
+                update_data["status"] = "inactive"
+                update_data["deactivatedAt"] = datetime.now(timezone.utc).isoformat()
+            
+            # If archiving
+            elif new_status == "archived":
+                update_data["status"] = "archived"
+                update_data["archivedAt"] = datetime.now(timezone.utc).isoformat()
+            
+            # Other status changes
+            else:
+                update_data["status"] = new_status
+        
+        # Update timestamp
+        update_data["updatedAt"] = datetime.now(timezone.utc).isoformat()
+        
+        # Perform update
+        result = await db.templates.update_one(
+            {"id": template_id},
+            {"$set": update_data}
+        )
+        
+        if result.modified_count == 0:
+            logger.warning(f"Template update resulted in no changes: {template_id}")
+        
+        # Return updated template
+        updated_template = await db.templates.find_one({"id": template_id}, {"_id": 0})
+        return updated_template
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating template: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update template: {str(e)}")
+
+
+@api_router.delete("/templates/{template_id}")
+async def delete_template(template_id: str):
+    """Delete a template"""
+    try:
+        # Get template
+        template = await db.templates.find_one({"id": template_id})
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+        
+        # Check if template is active
+        if template.get("status") == "active":
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete active template. Set status to 'inactive' first."
+            )
+        
+        # Delete files
+        pdf_path = Path(template["basePdfPath"])
+        thumbnail_path = TEMPLATES_DIR / f"{template_id}_thumbnail.webp"
+        
+        if pdf_path.exists():
+            pdf_path.unlink()
+            logger.info(f"Deleted template PDF: {pdf_path}")
+        
+        if thumbnail_path.exists():
+            thumbnail_path.unlink()
+            logger.info(f"Deleted thumbnail: {thumbnail_path}")
+        
+        # Delete from database
+        result = await db.templates.delete_one({"id": template_id})
+        
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Template not found in database")
+        
+        return {"message": "Template deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting template: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete template")
+
+
+@api_router.get("/templates/{template_id}/thumbnail.webp")
+async def get_template_thumbnail(template_id: str):
+    """Get template thumbnail"""
+    thumbnail_path = TEMPLATES_DIR / f"{template_id}_thumbnail.webp"
+    
+    if not thumbnail_path.exists():
+        raise HTTPException(status_code=404, detail="Thumbnail not found")
+    
+    return FileResponse(thumbnail_path, media_type="image/webp")
+
+
+@api_router.get("/templates/{template_id}.pdf")
+async def get_template_pdf(template_id: str):
+    """Get template PDF file"""
+    pdf_path = TEMPLATES_DIR / f"{template_id}.pdf"
+    
+    if not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="Template PDF not found")
+    
+    return FileResponse(pdf_path, media_type="application/pdf")
+
+
 
 @api_router.post("/storybooks/upload")
 async def upload_storybook(
