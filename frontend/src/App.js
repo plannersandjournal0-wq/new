@@ -5,6 +5,8 @@ import AdminLogin from '@/pages/AdminLogin';
 import Dashboard from '@/pages/Dashboard';
 import PreviewStudio from '@/pages/PreviewStudio';
 import CustomerViewer from '@/pages/CustomerViewer';
+import TemplateManagement from '@/pages/TemplateManagement';
+import AutomationOrders from '@/pages/AutomationOrders';
 import { AuthProvider } from '@/context/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
@@ -18,6 +20,16 @@ function App() {
           <Route path="/admin/dashboard" element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/templates" element={
+            <ProtectedRoute>
+              <TemplateManagement />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/orders" element={
+            <ProtectedRoute>
+              <AutomationOrders />
             </ProtectedRoute>
           } />
           <Route path="/admin/studio/:storybookId" element={

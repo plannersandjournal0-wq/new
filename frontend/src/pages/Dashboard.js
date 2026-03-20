@@ -155,15 +155,31 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <Button
-            onClick={() => logout()}
-            variant="ghost"
-            className="hidden md:flex text-magical-plum hover:text-magical-ink"
-            data-testid="logout-button"
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            Logout
-          </Button>
+          <div className="hidden md:flex items-center gap-2">
+            <Button
+              onClick={() => navigate('/admin/templates')}
+              variant="ghost"
+              className="text-magical-plum hover:text-magical-ink"
+            >
+              Templates
+            </Button>
+            <Button
+              onClick={() => navigate('/admin/orders')}
+              variant="ghost"
+              className="text-magical-plum hover:text-magical-ink"
+            >
+              Orders
+            </Button>
+            <Button
+              onClick={() => logout()}
+              variant="ghost"
+              className="text-magical-plum hover:text-magical-ink"
+              data-testid="logout-button"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
+          </div>
         </div>
 
         {/* Mobile search bar */}
