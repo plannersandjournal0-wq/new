@@ -21,6 +21,11 @@ function App() {
               <AdminPanel />
             </ProtectedRoute>
           } />
+          <Route path="/admin/dashboard" element={
+            <ProtectedRoute>
+              <AdminPanel />
+            </ProtectedRoute>
+          } />
           <Route path="/admin/studio/:storybookId" element={
             <ProtectedRoute>
               <PreviewStudio />
