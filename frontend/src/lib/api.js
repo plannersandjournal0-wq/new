@@ -97,6 +97,54 @@ export const api = {
     const response = await apiClient.post(`/storybooks/${id}/verify-password`, { password });
     return response.data;
   },
+
+  // ==================== ASSETS API ====================
+
+  // Fonts
+  getFonts: async () => {
+    const response = await apiClient.get('/assets/fonts');
+    return response.data;
+  },
+
+  uploadFont: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await apiClient.post('/assets/fonts', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+  },
+
+  deleteFont: async (fontId) => {
+    const response = await apiClient.delete(`/assets/fonts/${fontId}`);
+    return response.data;
+  },
+
+  // Sounds
+  getSounds: async () => {
+    const response = await apiClient.get('/assets/sounds');
+    return response.data;
+  },
+
+  uploadSound: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await apiClient.post('/assets/sounds', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+  },
+
+  deleteSound: async (soundId) => {
+    const response = await apiClient.delete(`/assets/sounds/${soundId}`);
+    return response.data;
+  },
+
+  // Creem Settings
+  getCreemSettings: async () => {
+    const response = await apiClient.get('/settings/creem');
+    return response.data;
+  },
 };
 
 export const getImageUrl = (path) => {

@@ -19,6 +19,20 @@ class FieldMapping(BaseModel):
     variableType: str  # "requestedName" in Phase 1
     fallbackValue: str = ""
 
+
+class TemplateStylingDefaults(BaseModel):
+    """Default styling settings for generated storybooks"""
+    fontId: Optional[str] = None  # Asset ID from fonts library
+    fontName: Optional[str] = None
+    fontUrl: Optional[str] = None
+    soundId: Optional[str] = None  # Asset ID from sounds library
+    soundName: Optional[str] = None
+    soundUrl: Optional[str] = None
+    flippingEffect: str = "StoryParallax"  # StoryParallax, Hardcover Classic, etc.
+    themePreset: str = "Warm Cream"  # Light, Dark, Classic, Minimal, custom
+    accentColor: str = "#C9A86A"
+
+
 class Template(BaseModel):
     """Complete template record"""
     model_config = ConfigDict(extra="ignore")
@@ -38,6 +52,9 @@ class Template(BaseModel):
     
     # Field mappings (admin configured)
     fieldMappings: List[FieldMapping] = []
+    
+    # Styling defaults for generated storybooks
+    stylingDefaults: Optional[TemplateStylingDefaults] = None
     
     # Template metadata
     status: str = "draft"  # draft | active | inactive | archived
@@ -64,6 +81,7 @@ class TemplateUpdate(BaseModel):
     description: Optional[str] = None
     status: Optional[str] = None
     fieldMappings: Optional[List[FieldMapping]] = None
+    stylingDefaults: Optional[TemplateStylingDefaults] = None
 
 class TemplateListResponse(BaseModel):
     """Response model for template list"""

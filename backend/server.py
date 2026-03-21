@@ -21,6 +21,7 @@ import shutil
 # Import automation modules
 from automation.models import Template, TemplateCreate, TemplateUpdate, TemplateListResponse, FieldMapping
 from automation.template_manager import TemplateManager
+from assets_manager import AssetsManager, FONTS_DIR, SOUNDS_DIR
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -1150,6 +1151,154 @@ async def download_backup():
         filename="storybook_vault_backup.zip",
         media_type="application/zip"
     )
+
+
+# ==================== ASSETS LIBRARY API ====================
+
+assets_manager = AssetsManager(db)
+
+# --- Fonts API ---
+
+@api_router.post("/assets/fonts")
+async def upload_font(file: UploadFile = File(...)):
+    """Upload a font file"""
+    try:
+        content = await file.read()
+        font = await assets_manager.upload_font(content, file.filename)
+        return {"success": True, "font": font}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Font upload error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload font: {str(e)}")
+
+
+@api_router.get("/assets/fonts")
+async def list_fonts():
+    """Get all uploaded fonts"""
+    fonts = await assets_manager.get_fonts()
+    return {"fonts": fonts, "total": len(fonts)}
+
+
+@api_router.get("/assets/fonts/{filename}")
+async def serve_font(filename: str):
+    """Serve a font file"""
+    file_path = FONTS_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Font not found")
+    
+    # Determine content type
+    ext = Path(filename).suffix.lower()
+    content_types = {
+        '.ttf': 'font/ttf',
+        '.otf': 'font/otf',
+        '.woff': 'font/woff',
+        '.woff2': 'font/woff2'
+    }
+    
+    return FileResponse(
+        file_path,
+        media_type=content_types.get(ext, 'application/octet-stream'),
+        headers={
+            "Cache-Control": "public, max-age=31536000",
+            "Access-Control-Allow-Origin": "*"
+        }
+    )
+
+
+@api_router.delete("/assets/fonts/{font_id}")
+async def delete_font(font_id: str):
+    """Delete a font"""
+    success = await assets_manager.delete_font(font_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Font not found")
+    return {"success": True, "message": "Font deleted"}
+
+
+# --- Sounds API ---
+
+@api_router.post("/assets/sounds")
+async def upload_sound(file: UploadFile = File(...)):
+    """Upload a sound effect file"""
+    try:
+        content = await file.read()
+        sound = await assets_manager.upload_sound(content, file.filename)
+        return {"success": True, "sound": sound}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Sound upload error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload sound: {str(e)}")
+
+
+@api_router.get("/assets/sounds")
+async def list_sounds():
+    """Get all uploaded sounds"""
+    sounds = await assets_manager.get_sounds()
+    return {"sounds": sounds, "total": len(sounds)}
+
+
+@api_router.get("/assets/sounds/{filename}")
+async def serve_sound(filename: str):
+    """Serve a sound file"""
+    file_path = SOUNDS_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Sound not found")
+    
+    # Determine content type
+    ext = Path(filename).suffix.lower()
+    content_types = {
+        '.mp3': 'audio/mpeg',
+        '.wav': 'audio/wav'
+    }
+    
+    return FileResponse(
+        file_path,
+        media_type=content_types.get(ext, 'application/octet-stream'),
+        headers={
+            "Cache-Control": "public, max-age=31536000",
+            "Access-Control-Allow-Origin": "*"
+        }
+    )
+
+
+@api_router.delete("/assets/sounds/{sound_id}")
+async def delete_sound(sound_id: str):
+    """Delete a sound"""
+    success = await assets_manager.delete_sound(sound_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Sound not found")
+    return {"success": True, "message": "Sound deleted"}
+
+
+# --- Settings/Credentials API ---
+
+@api_router.get("/settings/creem")
+async def get_creem_settings():
+    """Get Creem webhook settings for admin display"""
+    # Get the webhook URL from environment or construct it
+    app_base_url = os.getenv("APP_BASE_URL", "http://localhost:3000")
+    backend_url = app_base_url.replace("-frontend.", "-backend.").rstrip('/')
+    
+    # For production, construct the webhook URL
+    webhook_url = f"{backend_url}/api/webhooks/creem"
+    
+    # Check if credentials are configured
+    has_secret = bool(os.getenv("CREEM_WEBHOOK_SECRET")) and os.getenv("CREEM_WEBHOOK_SECRET") != "placeholder"
+    has_api_key = bool(os.getenv("CREEM_API_KEY"))
+    
+    return {
+        "webhookUrl": webhook_url,
+        "secretConfigured": has_secret,
+        "apiKeyConfigured": has_api_key,
+        "instructions": [
+            "1. Copy the webhook URL above",
+            "2. Go to your Creem.io dashboard → Webhooks",
+            "3. Add a new webhook with the URL",
+            "4. Select events: checkout.completed, checkout.failed, checkout.expired",
+            "5. Copy the webhook secret and add it to CREEM_WEBHOOK_SECRET in backend/.env"
+        ]
+    }
 
 # Include the router in the main app
 app.include_router(api_router)

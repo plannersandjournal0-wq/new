@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { BookOpen, FileText, Package, LogOut } from 'lucide-react';
+import { BookOpen, FileText, Package, LogOut, Settings as SettingsIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import Dashboard from '@/pages/Dashboard';
 import TemplateManagement from '@/pages/TemplateManagement';
 import AutomationOrders from '@/pages/AutomationOrders';
+import Settings from '@/pages/Settings';
 
 function AdminPanel() {
   const [activeSection, setActiveSection] = useState('dashboard');
@@ -19,7 +20,8 @@ function AdminPanel() {
   const sections = [
     { id: 'dashboard', name: 'Dashboard', icon: BookOpen },
     { id: 'templates', name: 'Templates', icon: FileText },
-    { id: 'orders', name: 'Orders', icon: Package }
+    { id: 'orders', name: 'Orders', icon: Package },
+    { id: 'settings', name: 'Settings', icon: SettingsIcon }
   ];
 
   return (
@@ -74,10 +76,11 @@ function AdminPanel() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto\">
+      <div className="flex-1 overflow-auto">
         {activeSection === 'dashboard' && <DashboardContent />}
         {activeSection === 'templates' && <TemplateManagement standalone={false} />}
         {activeSection === 'orders' && <AutomationOrders standalone={false} />}
+        {activeSection === 'settings' && <Settings />}
       </div>
     </div>
   );
