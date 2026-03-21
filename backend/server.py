@@ -693,11 +693,25 @@ async def creem_webhook(request: Request, background_tasks: BackgroundTasks):
     """
     Production webhook endpoint for Creem payment notifications.
     
+    Handles these Creem events:
+    - checkout.completed → Create order and trigger storybook generation
+    - checkout.failed → Mark order as failed with reason
+    - checkout.expired → Mark order as expired
+    
     1. Reads raw body bytes BEFORE JSON parsing
     2. Verifies creem-signature header using HMAC-SHA256
     3. Returns 200 immediately (don't make Creem wait for full processing)
     4. Processes order async in background
     """
+    event_log = {
+        "id": str(uuid.uuid4()),
+        "receivedAt": datetime.utcnow().isoformat() + "Z",
+        "eventType": None,
+        "payload": None,
+        "processingStatus": "pending",
+        "errorMessage": None
+    }
+    
     try:
         # Read raw body bytes FIRST (before any JSON parsing)
         raw_body = await request.body()
@@ -720,6 +734,9 @@ async def creem_webhook(request: Request, background_tasks: BackgroundTasks):
             
             if not is_valid:
                 logger.warning(f"Invalid Creem webhook signature")
+                event_log["processingStatus"] = "failed"
+                event_log["errorMessage"] = "Invalid signature"
+                await db.webhook_events.insert_one(event_log)
                 raise HTTPException(status_code=403, detail="Invalid signature")
         
         # Parse JSON payload
@@ -727,36 +744,164 @@ async def creem_webhook(request: Request, background_tasks: BackgroundTasks):
             webhook_data = await request.json()
         except Exception:
             # If body was already consumed, decode from raw_body
-            import json
             webhook_data = json.loads(raw_body.decode("utf-8"))
         
-        logger.info(f"Received Creem webhook: {webhook_data.get('orderId', 'unknown')}")
+        # Extract event type (Creem uses 'event' field)
+        event_type = webhook_data.get("event") or webhook_data.get("eventType") or "checkout.completed"
+        event_log["eventType"] = event_type
+        event_log["payload"] = webhook_data
         
-        # Handle webhook (creates order with idempotency)
-        result = await webhook_handler.handle_webhook(webhook_data, is_simulated=False)
+        logger.info(f"Received Creem webhook: event={event_type}, orderId={webhook_data.get('orderId', 'unknown')}")
         
-        if result.get("isExisting"):
-            # Order already exists - just acknowledge
+        # Handle different event types
+        if event_type == "checkout.completed":
+            # Process successful checkout
+            # Extract customer data from Creem payload
+            processed_data = {
+                "orderId": webhook_data.get("id") or webhook_data.get("orderId") or str(uuid.uuid4()),
+                "productSlug": webhook_data.get("product", {}).get("slug") or webhook_data.get("productSlug"),
+                "requestedName": (
+                    webhook_data.get("custom_fields", {}).get("requestedName") or
+                    webhook_data.get("requestedName") or
+                    webhook_data.get("customer", {}).get("name", "").split()[0] or
+                    "Customer"
+                ),
+                "customerEmail": (
+                    webhook_data.get("customer", {}).get("email") or
+                    webhook_data.get("customerEmail") or
+                    webhook_data.get("email")
+                ),
+                "buyerFullName": (
+                    webhook_data.get("customer", {}).get("name") or
+                    webhook_data.get("buyerFullName")
+                ),
+                "customFields": webhook_data.get("custom_fields", {}),
+                "paymentData": {
+                    "amount": webhook_data.get("amount"),
+                    "currency": webhook_data.get("currency"),
+                    "transactionId": webhook_data.get("id"),
+                    "paymentStatus": "completed"
+                }
+            }
+            
+            # Handle webhook (creates order with idempotency)
+            result = await webhook_handler.handle_webhook(processed_data, is_simulated=False)
+            
+            if result.get("isExisting"):
+                # Order already exists - just acknowledge
+                event_log["processingStatus"] = "skipped"
+                event_log["errorMessage"] = "Order already processed (idempotent)"
+                await db.webhook_events.insert_one(event_log)
+                return {
+                    "received": True,
+                    "message": "Order already processed",
+                    "orderId": result["orderId"]
+                }
+            
+            # Schedule background processing and return 200 immediately
+            order_id = result["orderId"]
+            background_tasks.add_task(process_creem_order_background, order_id)
+            
+            event_log["processingStatus"] = "processing"
+            await db.webhook_events.insert_one(event_log)
+            
             return {
                 "received": True,
-                "message": "Order already processed",
-                "orderId": result["orderId"]
+                "message": "Webhook received, processing in background",
+                "orderId": order_id
+            }
+            
+        elif event_type == "checkout.failed":
+            # Handle failed checkout
+            external_order_id = webhook_data.get("id") or webhook_data.get("orderId")
+            failure_reason = webhook_data.get("failure_reason") or webhook_data.get("error", {}).get("message") or "Payment failed"
+            
+            # Update existing order if it exists
+            existing = await db.automation_orders.find_one({"externalOrderId": external_order_id})
+            if existing:
+                await db.automation_orders.update_one(
+                    {"externalOrderId": external_order_id},
+                    {
+                        "$set": {
+                            "status": "failed",
+                            "errorMessage": failure_reason,
+                            "updatedAt": datetime.utcnow().isoformat() + "Z"
+                        },
+                        "$push": {
+                            "processingLog": {
+                                "timestamp": datetime.utcnow().isoformat() + "Z",
+                                "status": "failed",
+                                "message": f"Payment failed: {failure_reason}"
+                            }
+                        }
+                    }
+                )
+            
+            event_log["processingStatus"] = "completed"
+            await db.webhook_events.insert_one(event_log)
+            
+            return {
+                "received": True,
+                "message": "Checkout failure recorded",
+                "orderId": external_order_id
+            }
+            
+        elif event_type == "checkout.expired":
+            # Handle expired checkout
+            external_order_id = webhook_data.get("id") or webhook_data.get("orderId")
+            
+            # Update existing order if it exists
+            existing = await db.automation_orders.find_one({"externalOrderId": external_order_id})
+            if existing:
+                await db.automation_orders.update_one(
+                    {"externalOrderId": external_order_id},
+                    {
+                        "$set": {
+                            "status": "cancelled",
+                            "errorMessage": "Checkout expired",
+                            "updatedAt": datetime.utcnow().isoformat() + "Z"
+                        },
+                        "$push": {
+                            "processingLog": {
+                                "timestamp": datetime.utcnow().isoformat() + "Z",
+                                "status": "cancelled",
+                                "message": "Checkout session expired"
+                            }
+                        }
+                    }
+                )
+            
+            event_log["processingStatus"] = "completed"
+            await db.webhook_events.insert_one(event_log)
+            
+            return {
+                "received": True,
+                "message": "Checkout expiration recorded",
+                "orderId": external_order_id
             }
         
-        # Schedule background processing and return 200 immediately
-        order_id = result["orderId"]
-        background_tasks.add_task(process_creem_order_background, order_id)
-        
-        return {
-            "received": True,
-            "message": "Webhook received, processing in background",
-            "orderId": order_id
-        }
+        else:
+            # Unknown event type - log but accept
+            logger.warning(f"Unknown Creem event type: {event_type}")
+            event_log["processingStatus"] = "ignored"
+            event_log["errorMessage"] = f"Unknown event type: {event_type}"
+            await db.webhook_events.insert_one(event_log)
+            
+            return {
+                "received": True,
+                "message": f"Event type '{event_type}' acknowledged but not processed"
+            }
         
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Creem webhook error: {str(e)}")
+        event_log["processingStatus"] = "error"
+        event_log["errorMessage"] = str(e)
+        try:
+            await db.webhook_events.insert_one(event_log)
+        except:
+            pass
         # Return 200 anyway to prevent Creem from retrying
         # Log the error for investigation
         return {
