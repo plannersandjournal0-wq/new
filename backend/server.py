@@ -19,7 +19,7 @@ import json
 import shutil
 
 # Import automation modules
-from automation.models import Template, TemplateCreate, TemplateUpdate, TemplateListResponse, FieldMapping
+from automation.models import Template, TemplateCreate, TemplateUpdate, TemplateListResponse, FieldMapping, TemplateStylingDefaults
 from automation.template_manager import TemplateManager
 from assets_manager import AssetsManager, FONTS_DIR, SOUNDS_DIR
 
@@ -220,7 +220,8 @@ async def convert_pdf_to_storybook(
     pdf_path: str,
     title: str,
     customer_name: str,
-    password: Optional[str] = None
+    password: Optional[str] = None,
+    styling_defaults: Optional[Dict] = None
 ) -> dict:
     """
     Internal function to convert a personalized PDF into a storybook.
@@ -231,6 +232,7 @@ async def convert_pdf_to_storybook(
         title: Title for the storybook
         customer_name: Customer's requested name
         password: Optional password for protection
+        styling_defaults: Optional styling defaults from template
         
     Returns:
         Dict with storybookId, slug, customerViewUrl
@@ -247,6 +249,46 @@ async def convert_pdf_to_storybook(
         uploaded_pdf_path = UPLOAD_DIR / f"{storybook_id}.pdf"
         # Note: We no longer copy the PDF here - the spreads are generated directly
         # and the original personalized PDF will be cleaned up after use
+        
+        # Create storybook settings with defaults from template
+        settings = StorybookSettings()
+        
+        if styling_defaults:
+            # Apply template styling defaults to storybook settings
+            if styling_defaults.get("flippingEffect"):
+                effect = styling_defaults["flippingEffect"]
+                settings.onePageEffect = effect
+                settings.mobilePreferredEffect = effect
+                # Map effect names to valid options
+                effect_mapping = {
+                    "StoryParallax": "StoryParallax",
+                    "HardcoverClassic": "Hardcover Classic",
+                    "MagazineSlide": "Magazine",
+                    "SoftFade": "Fade",
+                    "None": "None"
+                }
+                mapped_effect = effect_mapping.get(effect, effect)
+                settings.onePageEffect = mapped_effect
+                settings.mobilePreferredEffect = mapped_effect
+            
+            if styling_defaults.get("themePreset"):
+                settings.themePreset = styling_defaults["themePreset"]
+            
+            if styling_defaults.get("accentColor"):
+                settings.accentColor = styling_defaults["accentColor"]
+            
+            if styling_defaults.get("soundName"):
+                settings.defaultSound = styling_defaults["soundName"]
+                settings.soundEnabled = True
+            
+            if styling_defaults.get("soundUrl"):
+                # Store custom sound URL for the viewer
+                settings.perSpreadSoundMap = {
+                    "_customSound": {
+                        "url": styling_defaults["soundUrl"],
+                        "name": styling_defaults.get("soundName", "Custom Sound")
+                    }
+                }
         
         # Create storybook record
         storybook_data = {
@@ -266,7 +308,8 @@ async def convert_pdf_to_storybook(
             "passwordHash": "",
             "expiresAt": None,
             "viewCount": 0,
-            "settings": StorybookSettings().model_dump(),
+            "settings": settings.model_dump(),
+            "stylingDefaults": styling_defaults,  # Store original template defaults
             "createdAt": datetime.now(timezone.utc).isoformat(),
             "updatedAt": datetime.now(timezone.utc).isoformat()
         }
@@ -459,6 +502,10 @@ async def update_template(template_id: str, update: TemplateUpdate):
                 raise HTTPException(status_code=400, detail=error_msg)
             
             update_data["fieldMappings"] = field_mappings
+        
+        # Handle styling defaults update
+        if update.stylingDefaults is not None:
+            update_data["stylingDefaults"] = update.stylingDefaults.model_dump()
         
         # Handle status update (includes one-active-per-productSlug rule)
         if update.status is not None:

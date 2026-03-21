@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Volume2, VolumeX, Lock, Maximize2, Minimize2, Hash, X, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { playSound } from '@/lib/sounds';
+import { playSound, getCustomSoundUrl } from '@/lib/sounds';
 
 const CustomerViewer = () => {
   const { slug } = useParams();
@@ -219,15 +219,24 @@ const CustomerViewer = () => {
     }
   };
 
+  // Helper to play sound with custom sound support
+  const playSoundEffect = () => {
+    if (!soundOn || !storybook.settings?.soundEnabled) return;
+    
+    const customSoundUrl = getCustomSoundUrl(storybook.settings);
+    const soundName = storybook.settings?.defaultSound || 'Sound 2';
+    const volume = storybook.settings?.soundVolume || 0.7;
+    
+    setTimeout(() => {
+      playSound(soundName, volume, customSoundUrl);
+    }, 50);
+  };
+
   const goToPrevious = () => {
     if (currentSpread > 0) {
       setImageLoaded(false);
       setCurrentSpread(currentSpread - 1);
-      if (soundOn && storybook.settings?.soundEnabled && storybook.settings?.defaultSound) {
-        setTimeout(() => {
-          playSound(storybook.settings.defaultSound, storybook.settings.soundVolume || 0.7);
-        }, 50);
-      }
+      playSoundEffect();
       resetHideControlsTimer();
     }
   };
@@ -236,11 +245,7 @@ const CustomerViewer = () => {
     if (currentSpread < storybook.spreads.length - 1) {
       setImageLoaded(false);
       setCurrentSpread(currentSpread + 1);
-      if (soundOn && storybook.settings?.soundEnabled && storybook.settings?.defaultSound) {
-        setTimeout(() => {
-          playSound(storybook.settings.defaultSound, storybook.settings.soundVolume || 0.7);
-        }, 50);
-      }
+      playSoundEffect();
       resetHideControlsTimer();
     }
   };
@@ -257,11 +262,7 @@ const CustomerViewer = () => {
 
     setImageLoaded(false);
     setCurrentSpread(pageNum - 1);
-    if (soundOn && storybook.settings?.soundEnabled && storybook.settings?.defaultSound) {
-      setTimeout(() => {
-        playSound(storybook.settings.defaultSound, storybook.settings.soundVolume || 0.7);
-      }, 50);
-    }
+    playSoundEffect();
 
     setShowGoTo(false);
     setGoToValue('');
@@ -711,7 +712,22 @@ const CustomerViewer = () => {
     );
   }
 
-  const themeBackground = storybook.settings?.themePreset === 'Midnight Navy' ? '#1C2340' : '#F7F1E8';
+  // Theme background colors based on presets
+  const getThemeBackground = () => {
+    const theme = storybook.settings?.themePreset || 'Warm Cream';
+    const themeColors = {
+      'Warm Cream': '#F5F0E6',
+      'Pure White': '#FFFFFF',
+      'Soft Gray': '#F3F4F6',
+      'Night Mode': '#1F2937',
+      'Sepia': '#F4ECD8',
+      'Midnight Navy': '#1C2340'
+    };
+    return themeColors[theme] || '#F7F1E8';
+  };
+  
+  const themeBackground = getThemeBackground();
+  const isDarkTheme = ['Night Mode', 'Midnight Navy'].includes(storybook.settings?.themePreset);
   
   // Track if image is ready (either from cache or just loaded)
   const isImageReady = imageCache.current.has(currentSpread) || imageLoaded;

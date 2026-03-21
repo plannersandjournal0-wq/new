@@ -18,15 +18,32 @@ export const BUILT_IN_SOUNDS = {
   }
 };
 
-export const playSound = (soundName, volume = 0.7) => {
-  const sound = BUILT_IN_SOUNDS[soundName];
-  if (sound && sound.url) {
+export const playSound = (soundName, volume = 0.7, customSoundUrl = null) => {
+  let soundUrl = customSoundUrl;
+  
+  // If no custom URL provided, try to find built-in sound
+  if (!soundUrl) {
+    const sound = BUILT_IN_SOUNDS[soundName];
+    if (sound && sound.url) {
+      soundUrl = sound.url;
+    }
+  }
+  
+  if (soundUrl) {
     try {
-      const audio = new Audio(sound.url);
+      const audio = new Audio(soundUrl);
       audio.volume = volume;
       audio.play().catch(err => console.log('Sound play failed:', err));
     } catch (error) {
       console.log('Audio playback error:', error);
     }
   }
+};
+
+// Helper to get custom sound URL from storybook settings
+export const getCustomSoundUrl = (settings) => {
+  if (settings?.perSpreadSoundMap?._customSound?.url) {
+    return settings.perSpreadSoundMap._customSound.url;
+  }
+  return null;
 };

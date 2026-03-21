@@ -119,7 +119,8 @@ class OrderProcessor:
             "title": template["title"],
             "fieldMappings": template.get("fieldMappings", []),
             "pageCount": template["pageCount"],
-            "orientation": template["orientation"]
+            "orientation": template["orientation"],
+            "stylingDefaults": template.get("stylingDefaults")
         }
         
         await self.db.automation_orders.update_one(
@@ -208,12 +209,16 @@ class OrderProcessor:
         # Get password if provided
         password = order["customerData"].get("password")
         
+        # Get styling defaults from template snapshot
+        styling_defaults = order["templateSnapshot"].get("stylingDefaults")
+        
         # Call the conversion function (internal reuse of existing system)
         flipbook_data = await convert_func(
             pdf_path=pdf_path,
             title=storybook_title,
             customer_name=requested_name,
-            password=password
+            password=password,
+            styling_defaults=styling_defaults
         )
         
         return flipbook_data
