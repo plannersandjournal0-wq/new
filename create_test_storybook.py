@@ -3,7 +3,7 @@ import json
 import io
 
 # Create and upload a real test storybook
-BACKEND_URL = "https://storybook-vault-2.preview.emergentagent.com/api"
+BACKEND_URL = "https://journal-build.preview.emergentagent.com/api"
 ADMIN_PASSWORD = "Pankaj021"
 
 def create_simple_pdf():
