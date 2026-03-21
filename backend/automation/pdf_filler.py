@@ -1,13 +1,16 @@
 import fitz  # PyMuPDF
-import re
+import os
 from pathlib import Path
 from typing import List, Dict
 import logging
 
 logger = logging.getLogger(__name__)
 
+# Path to custom fonts directory
+FONTS_DIR = Path(__file__).parent.parent / "fonts"
+
 class PDFFiller:
-    """Handles filling PDF form fields with customer data"""
+    """Handles filling PDF form fields with customer data using custom fonts"""
     
     @staticmethod
     async def fill_pdf_fields(
@@ -18,7 +21,7 @@ class PDFFiller:
     ) -> str:
         """
         Fill PDF form fields based on field mappings and customer data.
-        Uses widget.update() which reliably renders text with fallback fonts.
+        Uses custom font (AbroSans-Thin) for text rendering to match original design.
         
         Args:
             template_path: Path to the base template PDF
@@ -33,6 +36,15 @@ class PDFFiller:
             logger.info(f"Starting PDF fill: {template_path} -> {output_path}")
             doc = fitz.open(template_path)
             filled_fields = []
+            
+            # Load custom font
+            custom_font_path = FONTS_DIR / "AbroSans-Thin.ttf"
+            font_available = custom_font_path.exists()
+            
+            if font_available:
+                logger.info(f"Custom font found: {custom_font_path}")
+            else:
+                logger.warning(f"Custom font not found at {custom_font_path}, will use fallback")
 
             for mapping in field_mappings:
                 pdf_field_name = mapping.get("pdfFieldName")
@@ -58,24 +70,33 @@ class PDFFiller:
                         if widget.field_name != pdf_field_name:
                             continue
 
-                        # Fill the field using widget.update() for reliable rendering
-                        # This uses Helvetica as fallback but guarantees visible text
-                        widget.field_value = fill_value
-                        widget.text_fontsize = 0  # Auto-fit to field size
-                        widget.update()
+                        # Get the field rectangle
+                        rect = widget.rect
                         
-                        filled = True
-                        logger.info(
-                            f"Filled '{pdf_field_name}' on page {page_num+1} "
-                            f"with value: '{fill_value}'"
-                        )
+                        if font_available:
+                            # Use custom font by drawing text directly on page
+                            filled = PDFFiller._fill_with_custom_font(
+                                page, rect, fill_value, str(custom_font_path), pdf_field_name
+                            )
+                        else:
+                            # Fallback to widget update
+                            widget.field_value = fill_value
+                            widget.text_fontsize = 0
+                            widget.update()
+                            filled = True
+                        
+                        if filled:
+                            logger.info(
+                                f"Filled '{pdf_field_name}' on page {page_num+1} "
+                                f"with value: '{fill_value}' using {'custom font' if font_available else 'fallback'}"
+                            )
 
                 if filled:
                     filled_fields.append({"fieldName": pdf_field_name, "value": fill_value})
                 else:
                     logger.warning(f"Field '{pdf_field_name}' not found in PDF")
 
-            # Save with garbage collection to clean up unused objects
+            # Save with garbage collection
             doc.save(output_path, incremental=False, encryption=fitz.PDF_ENCRYPT_NONE, garbage=4)
             doc.close()
 
@@ -85,6 +106,73 @@ class PDFFiller:
         except Exception as e:
             logger.error(f"Error filling PDF: {str(e)}")
             raise Exception(f"Failed to fill PDF fields: {str(e)}")
+    
+    @staticmethod
+    def _fill_with_custom_font(page, rect, text: str, font_path: str, field_name: str) -> bool:
+        """
+        Fill a form field area with text using a custom font.
+        Draws text directly on the page at the field location.
+        
+        Args:
+            page: The PDF page object
+            rect: The rectangle area of the form field
+            text: The text to insert
+            font_path: Path to the custom .ttf font file
+            field_name: Name of the field (for font size lookup)
+            
+        Returns:
+            True if successful
+        """
+        try:
+            # Font settings based on field (from pdf-form-spec.json)
+            # text_0 (page 1): fontSize 35, fontColor #2F2A28
+            # text_1 (page 2): fontSize auto, fontColor #000000
+            
+            if field_name == "text_0":
+                font_size = 35
+                font_color = (0.184, 0.165, 0.157)  # #2F2A28
+            else:
+                # Auto-fit font size for other fields
+                font_size = 32  # Default size that fits well
+                font_color = (0, 0, 0)  # Black
+            
+            # Create a text writer for precise font control
+            writer = fitz.TextWriter(page.rect)
+            
+            # Load the custom font
+            font = fitz.Font(fontfile=font_path)
+            
+            # Calculate text position (left-aligned, vertically centered)
+            # The rect coordinates are in PDF space
+            x = rect.x0 + 2  # Small left padding
+            
+            # Calculate vertical center
+            text_height = font_size * 0.75  # Approximate text height
+            y = rect.y0 + (rect.height + text_height) / 2
+            
+            # Add text to writer
+            writer.append(
+                pos=(x, y),
+                text=text,
+                font=font,
+                fontsize=font_size
+            )
+            
+            # First, clear the field area by drawing a white rectangle
+            # This ensures the text appears cleanly
+            shape = page.new_shape()
+            shape.draw_rect(rect)
+            shape.finish(color=None, fill=(0.96, 0.96, 0.94))  # Match background color
+            shape.commit()
+            
+            # Write the text to the page
+            writer.write_text(page, color=font_color)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Custom font fill failed for field '{field_name}': {str(e)}")
+            return False
     
     @staticmethod
     async def validate_pdf_fillable(pdf_path: str) -> bool:
