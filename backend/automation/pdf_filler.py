@@ -18,7 +18,7 @@ class PDFFiller:
     ) -> str:
         """
         Fill PDF form fields based on field mappings and customer data.
-        Preserves original font by working with appearance streams directly.
+        Uses widget.update() which reliably renders text with fallback fonts.
         
         Args:
             template_path: Path to the base template PDF
@@ -58,115 +58,25 @@ class PDFFiller:
                         if widget.field_name != pdf_field_name:
                             continue
 
-                        # Get the widget's xref to access raw PDF object
-                        xref = widget.xref
-
-                        # Read the existing normal appearance stream (/N)
-                        # This contains the ACTUAL font reference used in the original design
-                        try:
-                            ap_xref = None
-                            widget_obj = doc.xref_object(xref)
-
-                            # Find /AP reference - can be direct or nested
-                            # Try direct reference first: /AP 36 0 R
-                            ap_match = re.search(r'/AP\s+(\d+)\s+0\s+R', widget_obj)
-                            if ap_match:
-                                ap_dict_xref = int(ap_match.group(1))
-                                # Check if this is the /N stream directly or an AP dictionary
-                                ap_dict_obj = doc.xref_object(ap_dict_xref)
-                                # Look for /N reference in AP dict
-                                n_match = re.search(r'/N\s+(\d+)\s+0\s+R', ap_dict_obj)
-                                if n_match:
-                                    ap_xref = int(n_match.group(1))
-                                else:
-                                    # The reference itself might be the /N stream
-                                    ap_xref = ap_dict_xref
-                            
-                            # Fallback: try nested format /AP << /N 123 0 R >>
-                            if not ap_xref:
-                                ap_match = re.search(r'/AP\s*<<[^>]*/N\s+(\d+)\s+0\s+R', widget_obj)
-                                if ap_match:
-                                    ap_xref = int(ap_match.group(1))
-
-                            if ap_xref:
-                                # Read original appearance stream
-                                logger.info(f"Reading AP stream from xref {ap_xref} for field '{pdf_field_name}'")
-                                orig_stream = doc.xref_stream(ap_xref)
-                                orig_stream_str = orig_stream.decode("latin-1", errors="replace")
-                                logger.info(f"AP stream content (first 200 chars): {orig_stream_str[:200]}")
-
-                                # Extract font size from Tf instruction (e.g. /F1 35 Tf or /AbroSans-Thin.ttf 35 Tf)
-                                tf_match = re.search(r'(/[\w.-]+)\s+([\d.]+)\s+Tf', orig_stream_str)
-                                if tf_match:
-                                    font_ref = tf_match.group(1)   # e.g. /F1 or /AbroSans-Thin.ttf
-                                    font_size = tf_match.group(2)  # e.g. 35
-
-                                    logger.info(f"Extracted font: {font_ref}, size: {font_size}")
-
-                                    # Extract color (e.g. 0.184 0.165 0.157 rg)
-                                    color_match = re.search(
-                                        r'([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+rg', orig_stream_str
-                                    )
-                                    color_str = ""
-                                    if color_match:
-                                        color_str = (
-                                            f"{color_match.group(1)} "
-                                            f"{color_match.group(2)} "
-                                            f"{color_match.group(3)} rg\n"
-                                        )
-
-                                    # Get field rect for text positioning
-                                    rect = widget.rect
-                                    w = rect.width
-                                    h = rect.height
-
-                                    # Build new appearance stream with same font reference
-                                    new_stream = (
-                                        f"/Tx BMC\n"
-                                        f"q\n"
-                                        f"BT\n"
-                                        f"{font_ref} {font_size} Tf\n"
-                                        f"{color_str}"
-                                        f"2 {h * 0.25:.2f} Td\n"
-                                        f"({fill_value}) Tj\n"
-                                        f"ET\n"
-                                        f"Q\n"
-                                        f"EMC\n"
-                                    )
-
-                                    # Write new appearance stream back
-                                    doc.update_stream(ap_xref, new_stream.encode("latin-1"))
-                                    
-                                    # Set the field value in PDF structure (for form readers)
-                                    # DO NOT call widget.update() here - it would regenerate appearance stream
-                                    doc.xref_set_key(xref, "V", fitz.get_pdf_str(fill_value))
-
-                                    filled = True
-                                    logger.info(
-                                        f"Filled '{pdf_field_name}' page {page_num+1} "
-                                        f"using AP stream font {font_ref} size {font_size}"
-                                    )
-                                    continue
-
-                        except Exception as ap_err:
-                            logger.warning(
-                                f"AP stream approach failed for '{pdf_field_name}': {ap_err}. "
-                                f"Falling back to widget fill."
-                            )
-
-                        # Fallback: basic widget fill if AP stream method fails
+                        # Fill the field using widget.update() for reliable rendering
+                        # This uses Helvetica as fallback but guarantees visible text
                         widget.field_value = fill_value
+                        widget.text_fontsize = 0  # Auto-fit to field size
                         widget.update()
+                        
                         filled = True
-                        logger.info(f"Filled '{pdf_field_name}' page {page_num+1} (fallback)")
+                        logger.info(
+                            f"Filled '{pdf_field_name}' on page {page_num+1} "
+                            f"with value: '{fill_value}'"
+                        )
 
                 if filled:
                     filled_fields.append({"fieldName": pdf_field_name, "value": fill_value})
                 else:
                     logger.warning(f"Field '{pdf_field_name}' not found in PDF")
 
-            # Save with full rendering (not incremental) to ensure appearance streams are written
-            doc.save(output_path, incremental=False, encryption=fitz.PDF_ENCRYPT_NONE)
+            # Save with garbage collection to clean up unused objects
+            doc.save(output_path, incremental=False, encryption=fitz.PDF_ENCRYPT_NONE, garbage=4)
             doc.close()
 
             logger.info(f"PDF fill complete. Filled {len(filled_fields)} field(s)")
