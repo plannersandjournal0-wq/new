@@ -140,9 +140,14 @@ export const api = {
     return response.data;
   },
 
-  // Creem Settings
-  getCreemSettings: async () => {
-    const response = await apiClient.get('/settings/creem');
+  // Polar Settings
+  getPolarSettings: async () => {
+    const response = await apiClient.get('/settings/polar');
+    return response.data;
+  },
+
+  simulatePolarWebhook: async (data) => {
+    const response = await apiClient.post('/automation/simulate-polar-webhook', data);
     return response.data;
   },
 };

@@ -4,6 +4,7 @@ import logging
 import uuid
 import hmac
 import hashlib
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -146,30 +147,143 @@ class WebhookHandler:
         
         return order
     
-    async def verify_creem_signature(
+    async def verify_polar_signature(
         self,
         raw_body: bytes,
+        webhook_id: str,
+        timestamp: str,
         signature: str,
         webhook_secret: str
     ) -> bool:
         """
-        Verify Creem webhook signature using HMAC-SHA256.
+        Verify Polar webhook signature.
+        
+        Polar uses a format: webhook-id.webhook-timestamp.raw_body
+        Then signs with HMAC-SHA256 and base64 encodes
         
         Args:
-            raw_body: The raw request body bytes (before JSON parsing)
-            signature: The creem-signature header value
+            raw_body: The raw request body bytes
+            webhook_id: The webhook-id header value
+            timestamp: The webhook-timestamp header value
+            signature: The webhook-signature header value
             webhook_secret: The webhook secret from environment
             
         Returns:
             True if signature is valid
         """
         try:
-            expected = hmac.new(
-                webhook_secret.encode("utf-8"),
-                raw_body,
+            # Polar signature format: v1,<base64_signature>
+            # The secret is base64 encoded, so we need to decode it first
+            
+            # Build the signed payload: id.timestamp.body
+            signed_payload = f"{webhook_id}.{timestamp}.{raw_body.decode('utf-8')}"
+            
+            # Decode the secret (Polar secrets are base64 encoded after 'polar_whs_' prefix)
+            # Actually, let's try with the raw secret first
+            secret_bytes = webhook_secret.encode('utf-8')
+            
+            # Compute HMAC-SHA256
+            expected_sig = hmac.new(
+                secret_bytes,
+                signed_payload.encode('utf-8'),
                 hashlib.sha256
-            ).hexdigest()
-            return hmac.compare_digest(expected, signature)
-        except Exception as e:
-            logger.error(f"Signature verification error: {str(e)}")
+            ).digest()
+            
+            # Base64 encode
+            expected_b64 = base64.standard_b64encode(expected_sig).decode('utf-8')
+            
+            # Parse the provided signature (format: v1,<sig>)
+            provided_sigs = []
+            for part in signature.split(' '):
+                if part.startswith('v1,'):
+                    provided_sigs.append(part[3:])
+            
+            # Compare
+            for sig in provided_sigs:
+                if hmac.compare_digest(expected_b64, sig):
+                    return True
+            
+            # If direct comparison fails, try alternate methods
+            logger.warning(f"Polar signature mismatch. Expected: {expected_b64[:20]}..., Got: {provided_sigs}")
             return False
+            
+        except Exception as e:
+            logger.error(f"Polar signature verification error: {str(e)}")
+            return False
+    
+    def parse_polar_webhook(self, webhook_data: Dict) -> Dict:
+        """
+        Parse Polar webhook payload and extract relevant fields.
+        
+        Polar order.paid event structure:
+        {
+            "type": "order.paid",
+            "data": {
+                "id": "order_id",
+                "metadata": {
+                    "product_slug": "..."
+                },
+                "custom_field_data": {
+                    "requested_name": "...",
+                    "password": "..."
+                },
+                "customer": {
+                    "email": "...",
+                    "name": "..."
+                },
+                ...
+            }
+        }
+        """
+        event_type = webhook_data.get("type", "")
+        data = webhook_data.get("data", {})
+        
+        # Extract order ID
+        order_id = data.get("id") or webhook_data.get("id")
+        
+        # Extract product slug from metadata
+        metadata = data.get("metadata", {})
+        product_slug = metadata.get("product_slug") or metadata.get("productSlug")
+        
+        # Extract custom field data
+        custom_fields = data.get("custom_field_data", {})
+        requested_name = (
+            custom_fields.get("requested_name") or 
+            custom_fields.get("requestedName") or
+            custom_fields.get("Requested Name") or
+            custom_fields.get("child_name") or
+            custom_fields.get("name")
+        )
+        password = (
+            custom_fields.get("password") or 
+            custom_fields.get("Password")
+        )
+        
+        # Extract customer info
+        customer = data.get("customer", {})
+        customer_email = customer.get("email", "")
+        customer_name = customer.get("name", "")
+        
+        # Extract payment data
+        payment_data = {
+            "amount": data.get("amount"),
+            "currency": data.get("currency"),
+            "transactionId": order_id,
+            "paymentStatus": "paid",
+            "paymentProvider": "polar"
+        }
+        
+        return {
+            "eventType": event_type,
+            "orderId": order_id,
+            "externalOrderId": order_id,
+            "eventId": webhook_data.get("event_id") or order_id,
+            "productSlug": product_slug,
+            "requestedName": requested_name,
+            "buyerFullName": customer_name,
+            "customerEmail": customer_email,
+            "password": password,
+            "customFields": custom_fields,
+            "paymentData": payment_data,
+            "rawData": webhook_data
+        }

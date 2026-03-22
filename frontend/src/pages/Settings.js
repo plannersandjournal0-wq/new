@@ -45,14 +45,14 @@ function Settings() {
           Assets Library
         </button>
         <button
-          onClick={() => setActiveTab('creem')}
+          onClick={() => setActiveTab('polar')}
           className={`px-4 py-3 font-medium transition-all border-b-2 -mb-px ${
-            activeTab === 'creem'
+            activeTab === 'polar'
               ? 'border-purple-600 text-purple-600'
               : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
-          Creem Credentials
+          Polar Credentials
         </button>
       </div>
 
@@ -63,7 +63,7 @@ function Settings() {
           onSubTabChange={setAssetsSubTab} 
         />
       )}
-      {activeTab === 'creem' && <CreemCredentials />}
+      {activeTab === 'polar' && <PolarCredentials />}
     </div>
   );
 }
@@ -502,12 +502,20 @@ function SoundItem({ sound, isPlaying, onTogglePlay, onDelete }) {
 }
 
 
-// ==================== CREEM CREDENTIALS ====================
+// ==================== POLAR CREDENTIALS ====================
 
-function CreemCredentials() {
+function PolarCredentials() {
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testForm, setTestForm] = useState({
+    productSlug: 'Demo',
+    requestedName: '',
+    customerEmail: '',
+    customerName: '',
+    password: ''
+  });
 
   useEffect(() => {
     loadSettings();
@@ -515,10 +523,10 @@ function CreemCredentials() {
 
   const loadSettings = async () => {
     try {
-      const data = await api.getCreemSettings();
+      const data = await api.getPolarSettings();
       setSettings(data);
     } catch (error) {
-      toast.error('Failed to load Creem settings');
+      toast.error('Failed to load Polar settings');
     } finally {
       setLoading(false);
     }
@@ -529,6 +537,27 @@ function CreemCredentials() {
     setCopied(true);
     toast.success('Webhook URL copied!');
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleTestWebhook = async () => {
+    if (!testForm.requestedName || !testForm.customerEmail) {
+      toast.error('Please fill in required fields (Requested Name and Customer Email)');
+      return;
+    }
+    
+    setTesting(true);
+    try {
+      const result = await api.simulatePolarWebhook(testForm);
+      if (result.success) {
+        toast.success(`Test order created! Status: ${result.order?.status}`);
+      } else {
+        toast.error(result.error || 'Test failed');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Test webhook failed');
+    } finally {
+      setTesting(false);
+    }
   };
 
   if (loading) {
@@ -544,10 +573,10 @@ function CreemCredentials() {
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
           <ExternalLink className="w-5 h-5" />
-          Creem.io Webhook Integration
+          Polar.sh Webhook Integration
         </h2>
         <p className="text-gray-600 mt-1">
-          Connect your Creem.io account to automatically process orders
+          Connect your Polar.sh account to automatically process orders
         </p>
       </div>
 
@@ -571,7 +600,7 @@ function CreemCredentials() {
       </div>
 
       {/* Status */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
+      <div className="mb-6">
         <div className={`p-4 rounded-lg border ${
           settings?.secretConfigured 
             ? 'bg-green-50 border-green-200' 
@@ -592,43 +621,107 @@ function CreemCredentials() {
           <p className={`text-sm mt-1 ${
             settings?.secretConfigured ? 'text-green-600' : 'text-yellow-600'
           }`}>
-            {settings?.secretConfigured ? 'Configured' : 'Not configured'}
-          </p>
-        </div>
-
-        <div className={`p-4 rounded-lg border ${
-          settings?.apiKeyConfigured 
-            ? 'bg-green-50 border-green-200' 
-            : 'bg-gray-50 border-gray-200'
-        }`}>
-          <div className="flex items-center gap-2">
-            {settings?.apiKeyConfigured ? (
-              <Check className="w-5 h-5 text-green-600" />
-            ) : (
-              <AlertCircle className="w-5 h-5 text-gray-400" />
-            )}
-            <span className={`font-medium ${
-              settings?.apiKeyConfigured ? 'text-green-700' : 'text-gray-500'
-            }`}>
-              API Key
-            </span>
-          </div>
-          <p className={`text-sm mt-1 ${
-            settings?.apiKeyConfigured ? 'text-green-600' : 'text-gray-500'
-          }`}>
-            {settings?.apiKeyConfigured ? 'Configured' : 'Optional'}
+            {settings?.secretConfigured ? 'Configured' : 'Not configured - add POLAR_WEBHOOK_SECRET to backend/.env'}
           </p>
         </div>
       </div>
 
       {/* Instructions */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
         <h3 className="font-medium text-blue-900 mb-2">Setup Instructions</h3>
         <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800">
           {settings?.instructions?.map((instruction, i) => (
             <li key={i}>{instruction}</li>
           ))}
         </ol>
+      </div>
+
+      {/* Required Fields Info */}
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+        <h3 className="font-medium text-amber-900 mb-2">Required Fields in Polar</h3>
+        <div className="text-sm text-amber-800 space-y-2">
+          <p><strong>Product Metadata:</strong></p>
+          <ul className="list-disc list-inside ml-4">
+            <li><code className="bg-amber-100 px-1 rounded">product_slug</code> - Must match your template's Product Slug</li>
+          </ul>
+          <p className="mt-2"><strong>Checkout Custom Fields:</strong></p>
+          <ul className="list-disc list-inside ml-4">
+            <li><code className="bg-amber-100 px-1 rounded">requested_name</code> - The name to personalize (required)</li>
+            <li><code className="bg-amber-100 px-1 rounded">password</code> - Optional password protection</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Test Webhook */}
+      <div className="border-t border-gray-200 pt-6">
+        <h3 className="font-medium text-gray-900 mb-4">Test Webhook</h3>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Product Slug *
+            </label>
+            <input
+              type="text"
+              value={testForm.productSlug}
+              onChange={(e) => setTestForm({...testForm, productSlug: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              placeholder="Demo"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Requested Name *
+            </label>
+            <input
+              type="text"
+              value={testForm.requestedName}
+              onChange={(e) => setTestForm({...testForm, requestedName: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              placeholder="Child's Name"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Customer Email *
+            </label>
+            <input
+              type="email"
+              value={testForm.customerEmail}
+              onChange={(e) => setTestForm({...testForm, customerEmail: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              placeholder="customer@example.com"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Password (optional)
+            </label>
+            <input
+              type="text"
+              value={testForm.password}
+              onChange={(e) => setTestForm({...testForm, password: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              placeholder="Optional password"
+            />
+          </div>
+        </div>
+        <button
+          onClick={handleTestWebhook}
+          disabled={testing}
+          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+        >
+          {testing ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Testing...
+            </>
+          ) : (
+            <>
+              <Play className="w-4 h-4" />
+              Run Test Webhook
+            </>
+          )}
+        </button>
       </div>
     </div>
   );
